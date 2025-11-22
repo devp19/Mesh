@@ -56,6 +56,10 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   const [isIdentifying, setIsIdentifying] = useState(false);
   const [showAnnotatedModal, setShowAnnotatedModal] = useState(false);
   const [annotatedImage, setAnnotatedImage] = useState<string | null>(null);
+  const [objConnected, setObjConnected] = useState(false);
+  const [camConnected, setCamConnected] = useState(false);
+  const [objDeviceName, setObjDeviceName] = useState<string>("—");
+  const [camDeviceName, setCamDeviceName] = useState<string>("—");
 
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -77,6 +81,48 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   const viewModeRef = useRef<ViewMode>("holo");
   const tooltipRef = useRef<HTMLDivElement>(null);
 
+  // BLE stick refs
+  const objDevRef = useRef<BluetoothDevice | null>(null);
+  const objCharRef = useRef<BluetoothRemoteGATTCharacteristic | null>(null);
+  const camDevRef = useRef<BluetoothDevice | null>(null);
+  const camCharRef = useRef<BluetoothRemoteGATTCharacteristic | null>(null);
+  const objConnectedRef = useRef(false);
+  const camConnectedRef = useRef(false);
+
+  // Camera control refs for stick-based controls
+  const cameraStateRef = useRef<{
+    camR: number;
+    camAz: number;
+    camEl: number;
+    camAzT: number;
+    camElT: number;
+    translateT: THREE.Vector2;
+    translateV: THREE.Vector2;
+  }>({
+    camR: 8,
+    camAz: Math.PI / 4,
+    camEl: Math.PI / 6,
+    camAzT: Math.PI / 4,
+    camElT: Math.PI / 6,
+    translateT: new THREE.Vector2(0, 0),
+    translateV: new THREE.Vector2(0, 0),
+  });
+
+  // Quaternion refs
+  const qDevObjRef = useRef(new THREE.Quaternion());
+  const qZeroObjRef = useRef(new THREE.Quaternion());
+  const qZeroObjInvRef = useRef(new THREE.Quaternion());
+  const objZeroSetRef = useRef(false);
+  const qDevCamRef = useRef(new THREE.Quaternion());
+  const qZeroCamRef = useRef(new THREE.Quaternion());
+  const qZeroCamInvRef = useRef(new THREE.Quaternion());
+  const camZeroSetRef = useRef(false);
+  const lastRelCamRef = useRef<THREE.Quaternion | null>(null);
+  const lastCamPacketTimeRef = useRef(0);
+  const qAxisFixRef = useRef(new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0, 'XYZ')));
+  const eObjRef = useRef(new THREE.Euler(0, 0, 0, "YXZ"));
+  const eCamRef = useRef(new THREE.Euler(0, 0, 0, "YXZ"));
+
   useEffect(() => {
     isIsolatingRef.current = isIsolating;
   }, [isIsolating]);
@@ -88,6 +134,251 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   useEffect(() => {
     viewModeRef.current = viewMode;
   }, [viewMode]);
+
+  // BLE UUIDs
+  const SERVICE_UUID = "12345678-1234-5678-1234-56789abcdef0";
+  const CHAR_UUID = "12345678-1234-5678-1234-56789abcdef1";
+
+  // OBJ stick connection handlers
+  const handleObjConnect = async () => {
+    try {
+      if (!navigator.bluetooth) {
+        alert("Web Bluetooth is not supported in this browser");
+        return;
+      }
+
+      const device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [SERVICE_UUID],
+      });
+
+      objDevRef.current = device;
+      const server = await device.gatt?.connect();
+      if (!server) throw new Error("Failed to connect to GATT server");
+
+      const service = await server.getPrimaryService(SERVICE_UUID);
+      const characteristic = await service.getCharacteristic(CHAR_UUID);
+      await characteristic.startNotifications();
+
+      objCharRef.current = characteristic;
+      characteristic.addEventListener(
+        "characteristicvaluechanged",
+        onObjQuat
+      );
+
+      objConnectedRef.current = true;
+      setObjConnected(true);
+      setObjDeviceName(device.name || "OBJ");
+
+      device.addEventListener("gattserverdisconnected", () => {
+        objConnectedRef.current = false;
+        setObjConnected(false);
+        setObjDeviceName("—");
+        objDevRef.current = null;
+        objCharRef.current = null;
+      });
+
+      // Set initial zero - wait for first quaternion to arrive, then user can zero if needed
+      // Initialize with identity quaternion
+      qZeroObjRef.current.set(0, 0, 0, 1);
+      qZeroObjInvRef.current.set(0, 0, 0, 1);
+      objZeroSetRef.current = false; // Don't apply zero until user clicks Zero button
+      cameraStateRef.current.translateT.set(0, 0);
+      cameraStateRef.current.translateV.set(0, 0);
+      
+      console.log("OBJ stick connected");
+    } catch (error: any) {
+      console.error("OBJ connect error:", error);
+      alert("Failed to connect OBJ stick: " + (error.message || error));
+    }
+  };
+
+  const handleObjDisconnect = () => {
+    try {
+      if (objDevRef.current?.gatt?.connected) {
+        objDevRef.current.gatt.disconnect();
+      }
+    } catch (error) {
+      console.error("OBJ disconnect error:", error);
+    }
+  };
+
+  const handleObjZero = () => {
+    qZeroObjRef.current.copy(qDevObjRef.current).normalize();
+    qZeroObjInvRef.current.copy(qZeroObjRef.current).invert();
+    objZeroSetRef.current = true;
+    cameraStateRef.current.translateT.set(0, 0);
+  };
+
+  const handleResetTranslate = () => {
+    cameraStateRef.current.translateT.set(0, 0);
+  };
+
+  // CAM stick connection handlers
+  const handleCamConnect = async () => {
+    try {
+      if (!navigator.bluetooth) {
+        alert("Web Bluetooth is not supported in this browser");
+        return;
+      }
+
+      const device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [SERVICE_UUID],
+      });
+
+      camDevRef.current = device;
+      const server = await device.gatt?.connect();
+      if (!server) throw new Error("Failed to connect to GATT server");
+
+      const service = await server.getPrimaryService(SERVICE_UUID);
+      const characteristic = await service.getCharacteristic(CHAR_UUID);
+      await characteristic.startNotifications();
+
+      camCharRef.current = characteristic;
+      characteristic.addEventListener(
+        "characteristicvaluechanged",
+        onCamQuat
+      );
+
+      camConnectedRef.current = true;
+      setCamConnected(true);
+      setCamDeviceName(device.name || "CAM");
+
+      device.addEventListener("gattserverdisconnected", () => {
+        camConnectedRef.current = false;
+        setCamConnected(false);
+        setCamDeviceName("—");
+        camDevRef.current = null;
+        camCharRef.current = null;
+      });
+
+      // Set initial zero - wait for first quaternion to arrive, then user can zero if needed
+      // Initialize with identity quaternion
+      qZeroCamRef.current.set(0, 0, 0, 1);
+      qZeroCamInvRef.current.set(0, 0, 0, 1);
+      camZeroSetRef.current = false; // Don't apply zero until user clicks Zero button
+      lastRelCamRef.current = null;
+      
+      console.log("CAM stick connected");
+    } catch (error: any) {
+      console.error("CAM connect error:", error);
+      alert("Failed to connect CAM stick: " + (error.message || error));
+    }
+  };
+
+  const handleCamDisconnect = () => {
+    try {
+      if (camDevRef.current?.gatt?.connected) {
+        camDevRef.current.gatt.disconnect();
+      }
+    } catch (error) {
+      console.error("CAM disconnect error:", error);
+    }
+  };
+
+  const handleCamZero = () => {
+    qZeroCamRef.current.copy(qDevCamRef.current).normalize();
+    qZeroCamInvRef.current.copy(qZeroCamRef.current).invert();
+    camZeroSetRef.current = true;
+    lastRelCamRef.current = null;
+  };
+
+  const handleResetView = () => {
+    if (cameraRef.current && controlsRef.current) {
+      controlsRef.current.reset();
+      cameraStateRef.current.camR = 8;
+      cameraStateRef.current.camAz = Math.PI / 4;
+      cameraStateRef.current.camEl = Math.PI / 6;
+      cameraStateRef.current.camAzT = Math.PI / 4;
+      cameraStateRef.current.camElT = Math.PI / 6;
+    }
+  };
+
+  // Quaternion processing functions
+  const onObjQuat = (e: Event) => {
+    const characteristic = e.target as BluetoothRemoteGATTCharacteristic;
+    const dv = characteristic.value;
+    if (!dv || dv.byteLength < 16) return;
+
+    const qx = dv.getFloat32(0, true);
+    const qy = dv.getFloat32(4, true);
+    const qz = dv.getFloat32(8, true);
+    const qw = dv.getFloat32(12, true);
+
+    qDevObjRef.current.set(qx, qy, qz, qw).normalize();
+    let qRel = qDevObjRef.current.clone();
+    if (objZeroSetRef.current) qRel.premultiply(qZeroObjInvRef.current);
+    qRel.premultiply(qAxisFixRef.current);
+
+    eObjRef.current.setFromQuaternion(qRel, "YXZ");
+    cameraStateRef.current.translateT.set(
+      eObjRef.current.z * 1.6,
+      eObjRef.current.x * 1.4
+    );
+    
+    // Debug: log first few updates
+    if (!objZeroSetRef.current || Math.random() < 0.01) {
+      console.log("OBJ quat update:", {
+        euler: { x: eObjRef.current.x, y: eObjRef.current.y, z: eObjRef.current.z },
+        translateT: { x: cameraStateRef.current.translateT.x, y: cameraStateRef.current.translateT.y }
+      });
+    }
+  };
+
+  const onCamQuat = (e: Event) => {
+    const characteristic = e.target as BluetoothRemoteGATTCharacteristic;
+    const dv = characteristic.value;
+    if (!dv || dv.byteLength < 16) return;
+
+    const now = performance.now();
+    const qx = dv.getFloat32(0, true);
+    const qy = dv.getFloat32(4, true);
+    const qz = dv.getFloat32(8, true);
+    const qw = dv.getFloat32(12, true);
+
+    qDevCamRef.current.set(qx, qy, qz, qw).normalize();
+    let qRel = qDevCamRef.current.clone();
+    if (camZeroSetRef.current) qRel.premultiply(qZeroCamInvRef.current);
+    qRel.premultiply(qAxisFixRef.current);
+
+    if (
+      !lastRelCamRef.current ||
+      now - lastCamPacketTimeRef.current > 220
+    ) {
+      lastRelCamRef.current = qRel.clone();
+      lastCamPacketTimeRef.current = now;
+      return;
+    }
+
+    const qDelta = lastRelCamRef.current.clone().invert().multiply(qRel).normalize();
+    eCamRef.current.setFromQuaternion(qDelta, "YXZ");
+
+    let dYaw = eCamRef.current.y;
+    let dPitch = eCamRef.current.x;
+    const db = (0.1 * Math.PI) / 180;
+    if (Math.abs(dYaw) < db) dYaw = 0;
+    if (Math.abs(dPitch) < db) dPitch = 0;
+
+    cameraStateRef.current.camAzT += dYaw * 6.8;
+    cameraStateRef.current.camElT = Math.max(
+      -1.2,
+      Math.min(1.2, cameraStateRef.current.camElT + dPitch * 4.2)
+    );
+
+    lastRelCamRef.current.copy(qRel);
+    lastCamPacketTimeRef.current = now;
+    
+    // Debug: log first few updates
+    if (!camZeroSetRef.current || Math.random() < 0.01) {
+      console.log("CAM quat update:", {
+        dYaw,
+        dPitch,
+        camAzT: cameraStateRef.current.camAzT,
+        camElT: cameraStateRef.current.camElT
+      });
+    }
+  };
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -106,10 +397,25 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     const camera = new THREE.PerspectiveCamera(
       60,
       window.innerWidth / window.innerHeight,
-      0.1,
-      1000
+      0.05,
+      2000
     );
-    camera.position.set(8, 5, 8);
+    // Initialize camera position to match default stick control values
+    const DEFAULT_AZ = Math.PI / 4;
+    const DEFAULT_EL = Math.PI / 6;
+    const DEFAULT_R = 8;
+    cameraStateRef.current.camR = DEFAULT_R;
+    cameraStateRef.current.camAz = DEFAULT_AZ;
+    cameraStateRef.current.camEl = DEFAULT_EL;
+    cameraStateRef.current.camAzT = DEFAULT_AZ;
+    cameraStateRef.current.camElT = DEFAULT_EL;
+    
+    camera.position.set(
+      DEFAULT_R * Math.cos(DEFAULT_EL) * Math.sin(DEFAULT_AZ),
+      DEFAULT_R * Math.sin(DEFAULT_EL),
+      DEFAULT_R * Math.cos(DEFAULT_EL) * Math.cos(DEFAULT_AZ)
+    );
+    camera.lookAt(0, 0, 0);
     cameraRef.current = camera;
 
     const renderer = new THREE.WebGLRenderer({
@@ -189,12 +495,74 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     // setTimeout(() => generateModel('Brain'), 0);
 
     // Animation loop
+    let lastT = performance.now();
     const animate = () => {
       animationFrameRef.current = requestAnimationFrame(animate);
-      if (controlsRef.current) controlsRef.current.update();
-      if (composerRef.current) composerRef.current.render();
+      
+      const now = performance.now();
+      const dt = Math.max(0, now - lastT);
+      lastT = now;
 
-      // Auto-rotation removed to prevent interference with inspection
+      // Update camera based on stick inputs if connected (use refs for real-time checking)
+      if (objConnectedRef.current || camConnectedRef.current) {
+        const state = cameraStateRef.current;
+        const camera = cameraRef.current;
+        
+        if (camera) {
+          // Smooth interpolation for translate
+          if (objConnectedRef.current) {
+            const a = 1 - Math.exp(-dt / 14);
+            state.translateV.lerp(state.translateT, a);
+          }
+
+          // Smooth interpolation for orbit
+          if (camConnectedRef.current) {
+            const ac = 1 - Math.exp(-dt / 14);
+            state.camAz += (state.camAzT - state.camAz) * ac;
+            state.camEl += (state.camElT - state.camEl) * ac;
+          }
+
+          // Calculate base camera position from orbit
+          const basePos = new THREE.Vector3(
+            state.camR * Math.cos(state.camEl) * Math.sin(state.camAz),
+            state.camR * Math.sin(state.camEl),
+            state.camR * Math.cos(state.camEl) * Math.cos(state.camAz)
+          );
+
+          // Get camera directions for translation
+          const forward = new THREE.Vector3();
+          camera.getWorldDirection(forward).normalize();
+          const right = new THREE.Vector3();
+          right.crossVectors(forward, camera.up).normalize();
+          const upVec = camera.up.clone().normalize();
+
+          // Apply translation
+          const translate = new THREE.Vector3()
+            .addScaledVector(right, state.translateV.x)
+            .addScaledVector(upVec, state.translateV.y);
+
+          // Set camera position
+          const camPos = new THREE.Vector3().addVectors(basePos, translate);
+          camera.position.copy(camPos);
+
+          // Look at target (origin + translate offset)
+          const target = new THREE.Vector3().add(translate);
+          camera.lookAt(target);
+        }
+
+        // Disable OrbitControls when sticks are active
+        if (controlsRef.current) {
+          controlsRef.current.enabled = false;
+        }
+      } else {
+        // Re-enable OrbitControls when sticks are disconnected
+        if (controlsRef.current) {
+          controlsRef.current.enabled = true;
+          controlsRef.current.update();
+        }
+      }
+
+      if (composerRef.current) composerRef.current.render();
     };
     animate();
 
@@ -216,6 +584,19 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       window.removeEventListener("resize", onWindowResize);
       if (animationFrameRef.current)
         cancelAnimationFrame(animationFrameRef.current);
+      
+      // Cleanup BLE connections
+      try {
+        if (objDevRef.current?.gatt?.connected) {
+          objDevRef.current.gatt.disconnect();
+        }
+        if (camDevRef.current?.gatt?.connected) {
+          camDevRef.current.gatt.disconnect();
+        }
+      } catch (error) {
+        console.error("Error disconnecting BLE devices:", error);
+      }
+      
       if (containerRef.current && renderer.domElement) {
         containerRef.current.removeChild(renderer.domElement);
       }
@@ -1196,8 +1577,78 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       <div className="w-full h-full relative">
         {/* Top Controls */}
         <div className="absolute top-0 left-0 w-full z-10 p-4 flex justify-between items-center pointer-events-none">
-          {/* Top Left is empty now as nav is in dashboard layout */}
-          <div></div>
+          {/* Top Left - BLE Stick Controls */}
+          <div className="flex items-center gap-2 pointer-events-auto">
+            {/* OBJ Stick Controls */}
+            <div className="bg-[#E5E6DA]/90 border border-[#1D1E15] rounded-lg px-2 py-1.5 flex items-center gap-1.5 backdrop-blur-md">
+              <span className="text-[10px] font-bold text-[#1D1E15] uppercase">OBJ</span>
+              {!objConnected ? (
+                <button
+                  onClick={handleObjConnect}
+                  className="px-2 py-1 bg-[#1f6feb] text-white text-[10px] rounded font-bold hover:bg-[#1a5fd0] transition-colors uppercase"
+                >
+                  Connect
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={handleObjDisconnect}
+                    className="px-2 py-1 bg-[#dc3545] text-white text-[10px] rounded font-bold hover:bg-[#c82333] transition-colors uppercase"
+                  >
+                    Disconnect
+                  </button>
+                  <span className="text-[10px] text-[#1D1E15] font-mono">{objDeviceName}</span>
+                  <button
+                    onClick={handleObjZero}
+                    className="px-2 py-1 bg-[#1D1E15] text-[#E5E6DA] text-[10px] rounded font-bold hover:bg-[#DF6C42] transition-colors uppercase"
+                  >
+                    Zero
+                  </button>
+                  <button
+                    onClick={handleResetTranslate}
+                    className="px-2 py-1 bg-[#1D1E15] text-[#E5E6DA] text-[10px] rounded font-bold hover:bg-[#DF6C42] transition-colors uppercase"
+                  >
+                    Reset
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* CAM Stick Controls */}
+            <div className="bg-[#E5E6DA]/90 border border-[#1D1E15] rounded-lg px-2 py-1.5 flex items-center gap-1.5 backdrop-blur-md">
+              <span className="text-[10px] font-bold text-[#1D1E15] uppercase">CAM</span>
+              {!camConnected ? (
+                <button
+                  onClick={handleCamConnect}
+                  className="px-2 py-1 bg-[#1f6feb] text-white text-[10px] rounded font-bold hover:bg-[#1a5fd0] transition-colors uppercase"
+                >
+                  Connect
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={handleCamDisconnect}
+                    className="px-2 py-1 bg-[#dc3545] text-white text-[10px] rounded font-bold hover:bg-[#c82333] transition-colors uppercase"
+                  >
+                    Disconnect
+                  </button>
+                  <span className="text-[10px] text-[#1D1E15] font-mono">{camDeviceName}</span>
+                  <button
+                    onClick={handleCamZero}
+                    className="px-2 py-1 bg-[#1D1E15] text-[#E5E6DA] text-[10px] rounded font-bold hover:bg-[#DF6C42] transition-colors uppercase"
+                  >
+                    Zero
+                  </button>
+                  <button
+                    onClick={handleResetView}
+                    className="px-2 py-1 bg-[#1D1E15] text-[#E5E6DA] text-[10px] rounded font-bold hover:bg-[#DF6C42] transition-colors uppercase"
+                  >
+                    Reset
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
 
           <div className="flex items-center gap-2 pointer-events-auto">
             <div className="flex items-center gap-1 bg-[#1D1E15]/5 border border-[#1D1E15]/10 rounded-lg p-1">
