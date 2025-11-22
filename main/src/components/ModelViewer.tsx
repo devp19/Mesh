@@ -1,16 +1,16 @@
-'use client';
+"use client";
 
-import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
-import BlockyLoader from './BlockyLoader';
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import * as BufferGeometryUtils from "three/addons/utils/BufferGeometryUtils.js";
+import BlockyLoader from "./BlockyLoader";
 
 interface ComponentData {
   mesh: THREE.Mesh;
@@ -23,7 +23,7 @@ interface ExplodedGroupData {
   components: ComponentData[];
 }
 
-type ViewMode = 'holo' | 'solid';
+type ViewMode = "holo" | "solid";
 
 interface ModelViewerProps {
   onClose?: () => void;
@@ -31,21 +31,31 @@ interface ModelViewerProps {
 
 export default function ModelViewer({ onClose }: ModelViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('holo');
-  const [prompt, setPrompt] = useState('Brain');
+  const [viewMode, setViewMode] = useState<ViewMode>("holo");
+  const [prompt, setPrompt] = useState("Brain");
   const [isExploded, setIsExploded] = useState(false);
   const [explosionDistance, setExplosionDistance] = useState(1.0);
-  const [selectedObject, setSelectedObject] = useState<THREE.Object3D | null>(null);
+  const [selectedObject, setSelectedObject] = useState<THREE.Object3D | null>(
+    null
+  );
   const [isIsolating, setIsIsolating] = useState(false);
   const [showInspector, setShowInspector] = useState(false);
-  const [inspectorData, setInspectorData] = useState({ name: '', description: '', type: '' });
-  const [annotationOverlay, setAnnotationOverlay] = useState<string | null>(null);
+  const [inspectorData, setInspectorData] = useState({
+    name: "",
+    description: "",
+    type: "",
+  });
+  const [annotationOverlay, setAnnotationOverlay] = useState<string | null>(
+    null
+  );
   const [showSplitSection, setShowSplitSection] = useState(false);
   const [showExplodedControls, setShowExplodedControls] = useState(false);
   const [loading, setLoading] = useState(false);
   const [modelReady, setModelReady] = useState(false);
   const [animationFinished, setAnimationFinished] = useState(false);
   const [isIdentifying, setIsIdentifying] = useState(false);
+  const [showAnnotatedModal, setShowAnnotatedModal] = useState(false);
+  const [annotatedImage, setAnnotatedImage] = useState<string | null>(null);
 
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -58,11 +68,13 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   const hoveredObjectRef = useRef<THREE.Object3D | null>(null);
   const raycasterRef = useRef<THREE.Raycaster | null>(null);
   const mouseRef = useRef<THREE.Vector2>(new THREE.Vector2());
-  const explodedGroupsRef = useRef<Map<THREE.Group, ExplodedGroupData>>(new Map());
+  const explodedGroupsRef = useRef<Map<THREE.Group, ExplodedGroupData>>(
+    new Map()
+  );
   const animationFrameRef = useRef<number | null>(null);
   const isIsolatingRef = useRef(false);
   const selectedObjectRef = useRef<THREE.Object3D | null>(null);
-  const viewModeRef = useRef<ViewMode>('holo');
+  const viewModeRef = useRef<ViewMode>("holo");
   const tooltipRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -77,7 +89,6 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     viewModeRef.current = viewMode;
   }, [viewMode]);
 
-
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -88,20 +99,29 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
 
     // Initialize Three.js scene
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xE5E6DA); // Match new background
-    scene.fog = new THREE.FogExp2(0xE5E6DA, 0.02);
+    scene.background = new THREE.Color(0xe5e6da); // Match new background
+    scene.fog = new THREE.FogExp2(0xe5e6da, 0.02);
     sceneRef.current = scene;
 
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const camera = new THREE.PerspectiveCamera(
+      60,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      1000
+    );
     camera.position.set(8, 5, 8);
     cameraRef.current = camera;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true,
+      preserveDrawingBuffer: true,
+    });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.shadowMap.enabled = false; // Disable shadows
-    renderer.setClearColor(0xE5E6DA, 1);
+    renderer.setClearColor(0xe5e6da, 1);
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
@@ -122,7 +142,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     // dirLight.shadow.mapSize.height = 2048;
     scene.add(dirLight);
 
-    const accentLight = new THREE.SpotLight(0xDF6C42, 2); // Orange accent
+    const accentLight = new THREE.SpotLight(0xdf6c42, 2); // Orange accent
     accentLight.position.set(-10, 5, -5);
     accentLight.lookAt(0, 0, 0);
     scene.add(accentLight);
@@ -144,10 +164,12 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     const renderScene = new RenderPass(scene, camera);
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      1.5, 0.4, 0.85
+      1.5,
+      0.4,
+      0.85
     );
     bloomPass.threshold = 0.95; // High threshold to avoid blooming the light background
-    bloomPass.strength = 0.4; 
+    bloomPass.strength = 0.4;
     bloomPass.radius = 0.5;
     bloomPass.enabled = true;
     bloomPassRef.current = bloomPass;
@@ -156,8 +178,6 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     composer.addPass(renderScene);
     composer.addPass(bloomPass);
     composerRef.current = composer;
-
-
 
     // Raycaster
     const raycaster = new THREE.Raycaster();
@@ -173,27 +193,29 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       animationFrameRef.current = requestAnimationFrame(animate);
       if (controlsRef.current) controlsRef.current.update();
       if (composerRef.current) composerRef.current.render();
-      
+
       // Auto-rotation removed to prevent interference with inspection
     };
     animate();
 
     // Resize handler for window
     const onWindowResize = () => {
-       if (!cameraRef.current || !rendererRef.current || !composerRef.current) return;
-       cameraRef.current.aspect = window.innerWidth / window.innerHeight;
-       cameraRef.current.updateProjectionMatrix();
-       rendererRef.current.setSize(window.innerWidth, window.innerHeight);
-       composerRef.current.setSize(window.innerWidth, window.innerHeight);
+      if (!cameraRef.current || !rendererRef.current || !composerRef.current)
+        return;
+      cameraRef.current.aspect = window.innerWidth / window.innerHeight;
+      cameraRef.current.updateProjectionMatrix();
+      rendererRef.current.setSize(window.innerWidth, window.innerHeight);
+      composerRef.current.setSize(window.innerWidth, window.innerHeight);
     };
-    window.addEventListener('resize', onWindowResize);
+    window.addEventListener("resize", onWindowResize);
 
     // Ensure correct clear color immediately
     renderer.setClearColor(0x0a0a0a, 1);
 
     return () => {
-      window.removeEventListener('resize', onWindowResize);
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      window.removeEventListener("resize", onWindowResize);
+      if (animationFrameRef.current)
+        cancelAnimationFrame(animationFrameRef.current);
       if (containerRef.current && renderer.domElement) {
         containerRef.current.removeChild(renderer.domElement);
       }
@@ -202,81 +224,108 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   }, []);
 
   const highlightMaterial = (obj: THREE.Mesh) => {
-      if (!(obj as any).userData.mats) return;
-      const currentMat = (obj.material as THREE.Material).clone();
-      if ('emissive' in currentMat) {
-        (currentMat as THREE.MeshStandardMaterial).emissive.setHex(0xffffff);
-        (currentMat as THREE.MeshStandardMaterial).emissiveIntensity = 0.5;
-      }
-      if (viewModeRef.current === 'solid' && 'color' in currentMat) {
-        (currentMat as THREE.MeshStandardMaterial).color.offsetHSL(0, 0, 0.2);
-      }
-      obj.material = currentMat;
+    if (!(obj as any).userData.mats) return;
+    const currentMat = (obj.material as THREE.Material).clone();
+    if ("emissive" in currentMat) {
+      (currentMat as THREE.MeshStandardMaterial).emissive.setHex(0xffffff);
+      (currentMat as THREE.MeshStandardMaterial).emissiveIntensity = 0.5;
+    }
+    if (viewModeRef.current === "solid" && "color" in currentMat) {
+      (currentMat as THREE.MeshStandardMaterial).color.offsetHSL(0, 0, 0.2);
+    }
+    obj.material = currentMat;
   };
 
   const restoreMaterial = (obj: THREE.Mesh) => {
-      if (!obj || !(obj as any).userData.mats) return;
-      const mats = (obj as any).userData.mats;
-      obj.material = viewModeRef.current === 'solid' ? mats.solid : mats.holo;
+    if (!obj || !(obj as any).userData.mats) return;
+    const mats = (obj as any).userData.mats;
+    obj.material = viewModeRef.current === "solid" ? mats.solid : mats.holo;
   };
 
   const handleMouseMove = (event: React.MouseEvent) => {
-      if (!containerRef.current || !raycasterRef.current || !cameraRef.current || !sceneRef.current) return;
+    if (
+      !containerRef.current ||
+      !raycasterRef.current ||
+      !cameraRef.current ||
+      !sceneRef.current
+    )
+      return;
 
-      // Update mouse ref for click events
-      mouseRef.current.x = (event.clientX / window.innerWidth) * 2 - 1;
-      mouseRef.current.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    // Update mouse ref for click events
+    mouseRef.current.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouseRef.current.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
-      // Hover effect logic
-      raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
-      const intersects = raycasterRef.current.intersectObjects(generatedObjectsRef.current, true);
+    // Hover effect logic
+    raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
+    const intersects = raycasterRef.current.intersectObjects(
+      generatedObjectsRef.current,
+      true
+    );
 
-      if (intersects.length > 0) {
-        const object = intersects[0].object as THREE.Mesh;
-        if ((object as any).userData.name && object !== hoveredObjectRef.current && object !== selectedObjectRef.current) {
-          if (hoveredObjectRef.current && hoveredObjectRef.current !== selectedObjectRef.current) {
-            restoreMaterial(hoveredObjectRef.current as THREE.Mesh);
-          }
-          hoveredObjectRef.current = object;
-          highlightMaterial(object);
-          containerRef.current.style.cursor = 'pointer';
-          
-          if (tooltipRef.current) {
-            tooltipRef.current.textContent = (object as any).userData.name;
-            tooltipRef.current.style.opacity = '1';
-            tooltipRef.current.style.transform = `translate(${event.clientX + 10}px, ${event.clientY + 10}px)`;
-          }
-        }
-      } else {
-        if (hoveredObjectRef.current && hoveredObjectRef.current !== selectedObjectRef.current) {
+    if (intersects.length > 0) {
+      const object = intersects[0].object as THREE.Mesh;
+      if (
+        (object as any).userData.name &&
+        object !== hoveredObjectRef.current &&
+        object !== selectedObjectRef.current
+      ) {
+        if (
+          hoveredObjectRef.current &&
+          hoveredObjectRef.current !== selectedObjectRef.current
+        ) {
           restoreMaterial(hoveredObjectRef.current as THREE.Mesh);
-          hoveredObjectRef.current = null;
         }
-        containerRef.current.style.cursor = 'default';
-        
+        hoveredObjectRef.current = object;
+        highlightMaterial(object);
+        containerRef.current.style.cursor = "pointer";
+
         if (tooltipRef.current) {
-          tooltipRef.current.style.opacity = '0';
+          tooltipRef.current.textContent = (object as any).userData.name;
+          tooltipRef.current.style.opacity = "1";
+          tooltipRef.current.style.transform = `translate(${
+            event.clientX + 10
+          }px, ${event.clientY + 10}px)`;
         }
       }
+    } else {
+      if (
+        hoveredObjectRef.current &&
+        hoveredObjectRef.current !== selectedObjectRef.current
+      ) {
+        restoreMaterial(hoveredObjectRef.current as THREE.Mesh);
+        hoveredObjectRef.current = null;
+      }
+      containerRef.current.style.cursor = "default";
+
+      if (tooltipRef.current) {
+        tooltipRef.current.style.opacity = "0";
+      }
+    }
   };
 
   const handleClick = (event: React.MouseEvent) => {
-      if (!raycasterRef.current || !cameraRef.current || !sceneRef.current) return;
-      
-      raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
-      const intersects = raycasterRef.current.intersectObjects(generatedObjectsRef.current, true);
-      
-      if (intersects.length > 0) {
-        const object = intersects[0].object;
-        if ((object as any).userData?.name) {
-          handleObjectClick(object);
-        }
+    if (!raycasterRef.current || !cameraRef.current || !sceneRef.current)
+      return;
+
+    raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
+    const intersects = raycasterRef.current.intersectObjects(
+      generatedObjectsRef.current,
+      true
+    );
+
+    if (intersects.length > 0) {
+      const object = intersects[0].object;
+      if ((object as any).userData?.name) {
+        handleObjectClick(object);
       }
+    }
   };
 
-
-
-  const createDualMaterials = (baseColor: THREE.Color, roughness = 0.5, metalness = 0.1) => {
+  const createDualMaterials = (
+    baseColor: THREE.Color,
+    roughness = 0.5,
+    metalness = 0.1
+  ) => {
     const holo = new THREE.MeshPhysicalMaterial({
       color: baseColor,
       wireframe: true,
@@ -284,7 +333,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       opacity: 0.3,
       emissive: baseColor,
       emissiveIntensity: 0.3,
-      side: THREE.DoubleSide
+      side: THREE.DoubleSide,
     });
 
     const solid = new THREE.MeshStandardMaterial({
@@ -292,7 +341,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       wireframe: false,
       roughness,
       metalness,
-      side: THREE.DoubleSide
+      side: THREE.DoubleSide,
     });
 
     return { holo, solid };
@@ -308,7 +357,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     const loader = new GLTFLoader();
 
     // Clear existing models
-    generatedObjectsRef.current.forEach(obj => sceneRef.current!.remove(obj));
+    generatedObjectsRef.current.forEach((obj) => sceneRef.current!.remove(obj));
     generatedObjectsRef.current = [];
     explodedGroupsRef.current.clear();
     resetView();
@@ -317,7 +366,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       url,
       (gltf) => {
         const model = gltf.scene;
-        
+
         // Flatten hierarchy to ensure Split Mesh works correctly
         const flatGroup = new THREE.Group();
         const meshes: THREE.Mesh[] = [];
@@ -328,39 +377,41 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         // 2. Collect all meshes
         model.traverse((child) => {
           if ((child as THREE.Mesh).isMesh) {
-             meshes.push(child as THREE.Mesh);
+            meshes.push(child as THREE.Mesh);
           }
         });
 
         // 3. Move meshes to flat group, preserving world transform
         meshes.forEach((mesh) => {
-           const worldMatrix = mesh.matrixWorld.clone();
-           
-           // Create dual materials while we're here
-           const originalMat = mesh.material as THREE.MeshStandardMaterial;
-           const baseColor = originalMat.color ? originalMat.color : new THREE.Color(0x00aaff);
-           const mats = createDualMaterials(baseColor, 0.5, 0.2);
-           if (originalMat.map) mats.solid = originalMat;
+          const worldMatrix = mesh.matrixWorld.clone();
 
-           // Apply new material
-           mesh.material = mats.solid; // Default to solid for now
-           (mesh as any).userData = {
-              mats,
-              name: mesh.name || `Part ${meshes.length}`,
-              description: 'Imported Geometry',
-              type: 'Imported'
-           };
-           mesh.castShadow = false;
-           mesh.receiveShadow = false;
+          // Create dual materials while we're here
+          const originalMat = mesh.material as THREE.MeshStandardMaterial;
+          const baseColor = originalMat.color
+            ? originalMat.color
+            : new THREE.Color(0x00aaff);
+          const mats = createDualMaterials(baseColor, 0.5, 0.2);
+          if (originalMat.map) mats.solid = originalMat;
 
-           // Add to flat group
-           flatGroup.add(mesh);
-           
-           // Apply world transform
-           // Since flatGroup is at identity (0,0,0), setting local matrix to world matrix works
-           mesh.matrix.copy(worldMatrix);
-           mesh.matrix.decompose(mesh.position, mesh.quaternion, mesh.scale);
-           mesh.updateMatrixWorld();
+          // Apply new material
+          mesh.material = mats.solid; // Default to solid for now
+          (mesh as any).userData = {
+            mats,
+            name: mesh.name || `Part ${meshes.length}`,
+            description: "Imported Geometry",
+            type: "Imported",
+          };
+          mesh.castShadow = false;
+          mesh.receiveShadow = false;
+
+          // Add to flat group
+          flatGroup.add(mesh);
+
+          // Apply world transform
+          // Since flatGroup is at identity (0,0,0), setting local matrix to world matrix works
+          mesh.matrix.copy(worldMatrix);
+          mesh.matrix.decompose(mesh.position, mesh.quaternion, mesh.scale);
+          mesh.updateMatrixWorld();
         });
 
         // 4. Center and scale the flat group
@@ -381,11 +432,11 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
 
         sceneRef.current!.add(flatGroup);
         generatedObjectsRef.current.push(flatGroup);
-        
+
         if (controlsRef.current) {
-            controlsRef.current.reset();
+          controlsRef.current.reset();
         }
-        
+
         updateViewMode();
 
         if (meshes.length > 1) {
@@ -395,15 +446,15 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         if (isBlob) {
           URL.revokeObjectURL(url);
         }
-        
+
         setModelReady(true);
       },
       (progress) => {
-         // Optional logging
+        // Optional logging
       },
       (error) => {
-        console.error('Error loading file:', error);
-        alert('Error loading file. See console.');
+        console.error("Error loading file:", error);
+        alert("Error loading file. See console.");
         if (isBlob) {
           URL.revokeObjectURL(url);
         }
@@ -416,99 +467,122 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     if (!sceneRef.current || !prompt.trim()) return;
 
     setLoading(true);
-    
+
     try {
-      console.log('Searching for:', prompt);
-      const searchRes = await fetch(`/api/search?q=${encodeURIComponent(prompt)}`);
+      console.log("Searching for:", prompt);
+      const searchRes = await fetch(
+        `/api/search?q=${encodeURIComponent(prompt)}`
+      );
       const searchData = await searchRes.json();
-      
+
       if (!searchRes.ok) {
-        throw new Error(searchData.error + (searchData.details ? `: ${JSON.stringify(searchData.details)}` : '') || 'Search failed');
+        throw new Error(
+          searchData.error +
+            (searchData.details
+              ? `: ${JSON.stringify(searchData.details)}`
+              : "") || "Search failed"
+        );
       }
-      
+
       if (!searchData.uid) {
-        alert('No 3D model found for this prompt.');
+        alert("No 3D model found for this prompt.");
         setLoading(false);
         return;
       }
-      
-      console.log('Found UID:', searchData.uid);
+
+      console.log("Found UID:", searchData.uid);
       const downloadRes = await fetch(`/api/download?uid=${searchData.uid}`);
       const downloadData = await downloadRes.json();
-      
+
       if (!downloadRes.ok || !downloadData.success) {
-         if (downloadData.potentialUrls && downloadData.potentialUrls.length > 0) {
-             console.log('Using potential URL fallback');
-             // potentialUrls might be an array of strings. We need to find the best one.
-             // Filter for .glb or .gltf if possible
-             const bestUrl = downloadData.potentialUrls.find((u: string) => u.includes('.glb')) || 
-                             downloadData.potentialUrls.find((u: string) => u.includes('.gltf')) || 
-                             downloadData.potentialUrls[0];
-             
-             loadModelFromUrl(bestUrl, false);
-             return;
-         }
-         throw new Error(downloadData.message || 'Failed to get download URL');
+        if (
+          downloadData.potentialUrls &&
+          downloadData.potentialUrls.length > 0
+        ) {
+          console.log("Using potential URL fallback");
+          // potentialUrls might be an array of strings. We need to find the best one.
+          // Filter for .glb or .gltf if possible
+          const bestUrl =
+            downloadData.potentialUrls.find((u: string) =>
+              u.includes(".glb")
+            ) ||
+            downloadData.potentialUrls.find((u: string) =>
+              u.includes(".gltf")
+            ) ||
+            downloadData.potentialUrls[0];
+
+          loadModelFromUrl(bestUrl, false);
+          return;
+        }
+        throw new Error(downloadData.message || "Failed to get download URL");
       }
-      
+
       // Extract URL
       let modelUrl = downloadData.data.glb?.url || downloadData.data.gltf?.url;
-      
+
       // Fallback: sometimes the structure is directly inside the data if the endpoint returned different format
       if (!modelUrl && downloadData.data.gltf) {
-          modelUrl = downloadData.data.gltf.url;
+        modelUrl = downloadData.data.gltf.url;
       }
-      
+
       if (!modelUrl) {
-         // If we have a successful response but no direct GLB/GLTF url in standard location
-         console.warn('Standard URL location failed, checking alternatives in response data...', downloadData);
-         throw new Error('No compatible model format (GLB/GLTF) found in API response.');
+        // If we have a successful response but no direct GLB/GLTF url in standard location
+        console.warn(
+          "Standard URL location failed, checking alternatives in response data...",
+          downloadData
+        );
+        throw new Error(
+          "No compatible model format (GLB/GLTF) found in API response."
+        );
       }
-      
-      console.log('Loading model from:', modelUrl);
+
+      console.log("Loading model from:", modelUrl);
       loadModelFromUrl(modelUrl, false);
-      
     } catch (error) {
-      console.error('Generation error:', error);
-      alert('Failed to generate model. ' + (error instanceof Error ? error.message : ''));
+      console.error("Generation error:", error);
+      alert(
+        "Failed to generate model. " +
+          (error instanceof Error ? error.message : "")
+      );
       setLoading(false);
     }
   };
 
   const updateViewMode = () => {
-    if (!sceneRef.current || !bloomPassRef.current || !rendererRef.current) return;
+    if (!sceneRef.current || !bloomPassRef.current || !rendererRef.current)
+      return;
 
-    const isSolid = viewMode === 'solid';
-    
+    const isSolid = viewMode === "solid";
+
     // Always disable bloom to maintain exact background color #E5E6DA
     bloomPassRef.current.enabled = false;
-    
-    sceneRef.current.background = new THREE.Color(0xE5E6DA); 
-    (sceneRef.current.fog as THREE.FogExp2).color.setHex(0xE5E6DA);
-    rendererRef.current.setClearColor(0xE5E6DA, 1);
-    
+
+    sceneRef.current.background = new THREE.Color(0xe5e6da);
+    (sceneRef.current.fog as THREE.FogExp2).color.setHex(0xe5e6da);
+    rendererRef.current.setClearColor(0xe5e6da, 1);
+
     // Shadows only in solid mode
     if (shadowPlaneRef.current) {
-        shadowPlaneRef.current.visible = false;
+      shadowPlaneRef.current.visible = false;
     }
 
-    generatedObjectsRef.current.forEach(group => {
-      group.traverse(child => {
+    generatedObjectsRef.current.forEach((group) => {
+      group.traverse((child) => {
         if ((child as THREE.Mesh).isMesh && (child as any).userData?.mats) {
           const mesh = child as THREE.Mesh;
           const mats = (mesh as any).userData.mats;
-          
+
           // Update materials for light theme if needed
           if (!isSolid) {
-             // For Holo mode in light theme, we want dark wireframes
-             const holoMat = mats.holo as THREE.MeshPhysicalMaterial;
-             if (holoMat) {
-                 holoMat.color.setHex(0xDF6C42); // Orange wireframe
-                 holoMat.emissive.setHex(0xDF6C42);
-                 // Reduced intensity to prevent color blowout, increased opacity for visibility
-                 holoMat.emissiveIntensity = 1.0; 
-                 holoMat.opacity = 0.8; 
-             }
+            // For Holo mode in light theme, we want dark wireframes
+            const holoMat = mats.holo as THREE.MeshPhysicalMaterial;
+            if (holoMat) {
+              holoMat.color.setHex(0xdf6c42); // Orange wireframe
+              holoMat.emissive.setHex(0xdf6c42);
+              // Reduced intensity to prevent color blowout, increased opacity for visibility
+              holoMat.emissiveIntensity = 1.0;
+              holoMat.opacity = 0.8;
+            }
           }
 
           mesh.material = isSolid ? mats.solid : mats.holo;
@@ -545,10 +619,14 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     // Restore all materials first if switching
     if (isIsolating && selectedObject) {
       sceneRef.current.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh && child !== shadowPlaneRef.current && (child as any).userData?.mats) {
+        if (
+          (child as THREE.Mesh).isMesh &&
+          child !== shadowPlaneRef.current &&
+          (child as any).userData?.mats
+        ) {
           const mesh = child as THREE.Mesh;
           const mats = (mesh as any).userData.mats;
-          mesh.material = viewMode === 'solid' ? mats.solid : mats.holo;
+          mesh.material = viewMode === "solid" ? mats.solid : mats.holo;
           (mesh.material as THREE.Material).transparent = false;
           (mesh.material as THREE.Material).opacity = 1;
         }
@@ -559,7 +637,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     setIsIsolating(true);
 
     const userData = (object as any).userData;
-    if (object.type === 'Mesh') {
+    if (object.type === "Mesh") {
       setShowSplitSection(true);
     } else {
       setShowSplitSection(false);
@@ -567,11 +645,17 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
 
     // Dim all other meshes
     sceneRef.current.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh && child !== object && child !== shadowPlaneRef.current) {
+      if (
+        (child as THREE.Mesh).isMesh &&
+        child !== object &&
+        child !== shadowPlaneRef.current
+      ) {
         const mesh = child as THREE.Mesh;
         if ((mesh as any).userData?.mats) {
           const mats = (mesh as any).userData.mats;
-          mesh.material = (viewMode === 'solid' ? mats.solid : mats.holo).clone();
+          mesh.material = (
+            viewMode === "solid" ? mats.solid : mats.holo
+          ).clone();
         }
         (mesh.material as THREE.Material).transparent = true;
         (mesh.material as THREE.Material).opacity = 0.1;
@@ -581,7 +665,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     // Highlight selected
     const mesh = object as THREE.Mesh;
     const mats = (mesh as any).userData.mats;
-    if (viewMode === 'holo') {
+    if (viewMode === "holo") {
       mesh.material = mats.holo.clone();
       (mesh.material as THREE.MeshPhysicalMaterial).color.setHex(0x667eea);
       (mesh.material as THREE.Material).opacity = 1;
@@ -594,14 +678,15 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     setInspectorData({
       name: userData.name,
       description: userData.description,
-      type: userData.type
+      type: userData.type,
     });
 
     // Load cached annotation if available
-    if (userData.annotation) {
-        setAnnotationOverlay(userData.annotation);
+    if (userData.annotatedImage) {
+      setAnnotatedImage(userData.annotatedImage);
+      setShowAnnotatedModal(true);
     } else {
-        setAnnotationOverlay(null);
+      setAnnotatedImage(null);
     }
 
     setShowInspector(true);
@@ -611,10 +696,14 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     if (!sceneRef.current) return;
 
     sceneRef.current.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh && child !== shadowPlaneRef.current && (child as any).userData?.mats) {
+      if (
+        (child as THREE.Mesh).isMesh &&
+        child !== shadowPlaneRef.current &&
+        (child as any).userData?.mats
+      ) {
         const mesh = child as THREE.Mesh;
         const mats = (mesh as any).userData.mats;
-        mesh.material = viewMode === 'solid' ? mats.solid : mats.holo;
+        mesh.material = viewMode === "solid" ? mats.solid : mats.holo;
         (mesh.material as THREE.Material).transparent = false;
         (mesh.material as THREE.Material).opacity = 1;
       }
@@ -625,10 +714,17 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     setShowInspector(false);
     setShowSplitSection(false);
     setAnnotationOverlay(null);
+    setAnnotatedImage(null);
+    setShowAnnotatedModal(false);
   };
 
   const handleSplitMesh = async () => {
-    if (!selectedObject || !(selectedObject as THREE.Mesh).geometry || !sceneRef.current) return;
+    if (
+      !selectedObject ||
+      !(selectedObject as THREE.Mesh).geometry ||
+      !sceneRef.current
+    )
+      return;
 
     const mesh = selectedObject as THREE.Mesh;
     const parent = mesh.parent;
@@ -639,7 +735,9 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     let multiMeshData: ExplodedGroupData | null = null;
     while (parentGroup) {
       if (explodedGroupsRef.current.has(parentGroup as THREE.Group)) {
-        multiMeshData = explodedGroupsRef.current.get(parentGroup as THREE.Group)!;
+        multiMeshData = explodedGroupsRef.current.get(
+          parentGroup as THREE.Group
+        )!;
         break;
       }
       parentGroup = parentGroup.parent;
@@ -647,7 +745,11 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
 
     if (multiMeshData) {
       setIsExploded(true);
-      applyExplodedView(parentGroup as THREE.Group, multiMeshData.components, multiMeshData.originalCenter);
+      applyExplodedView(
+        parentGroup as THREE.Group,
+        multiMeshData.components,
+        multiMeshData.originalCenter
+      );
       setShowExplodedControls(true);
       return;
     }
@@ -666,7 +768,9 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       const facesCount = index.length / 3;
 
       // Build vertex-to-faces map
-      const vertToFaces: number[][] = new Array(vertexCount).fill(0).map(() => []);
+      const vertToFaces: number[][] = new Array(vertexCount)
+        .fill(0)
+        .map(() => []);
       for (let i = 0; i < facesCount; i++) {
         vertToFaces[index[i * 3]].push(i);
         vertToFaces[index[i * 3 + 1]].push(i);
@@ -692,7 +796,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
           const b = index[f * 3 + 1];
           const c = index[f * 3 + 2];
 
-          [a, b, c].forEach(vIdx => {
+          [a, b, c].forEach((vIdx) => {
             const neighbors = vertToFaces[vIdx];
             for (const n of neighbors) {
               if (!visitedFaces[n]) {
@@ -706,7 +810,9 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       }
 
       if (components.length <= 1) {
-        alert('Mesh is already a single continuous piece. Cannot split further.');
+        alert(
+          "Mesh is already a single continuous piece. Cannot split further."
+        );
         setLoading(false);
         return;
       }
@@ -714,10 +820,10 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       // Calculate local geometry center for explosion origin
       let localCenter = new THREE.Vector3();
       if (indexedGeom.boundingBox) {
-         indexedGeom.boundingBox.getCenter(localCenter);
+        indexedGeom.boundingBox.getCenter(localCenter);
       } else {
-         indexedGeom.computeBoundingBox();
-         indexedGeom.boundingBox!.getCenter(localCenter);
+        indexedGeom.computeBoundingBox();
+        indexedGeom.boundingBox!.getCenter(localCenter);
       }
 
       // Reconstruct meshes
@@ -736,36 +842,52 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       components.forEach((faceIndices, idx) => {
         const newPositions: number[] = [];
 
-        faceIndices.forEach(f => {
+        faceIndices.forEach((f) => {
           const a = index[f * 3];
           const b = index[f * 3 + 1];
           const c = index[f * 3 + 2];
 
           newPositions.push(
-            posAttr.getX(a), posAttr.getY(a), posAttr.getZ(a),
-            posAttr.getX(b), posAttr.getY(b), posAttr.getZ(b),
-            posAttr.getX(c), posAttr.getY(c), posAttr.getZ(c)
+            posAttr.getX(a),
+            posAttr.getY(a),
+            posAttr.getZ(a),
+            posAttr.getX(b),
+            posAttr.getY(b),
+            posAttr.getZ(b),
+            posAttr.getX(c),
+            posAttr.getY(c),
+            posAttr.getZ(c)
           );
         });
 
         const newGeo = new THREE.BufferGeometry();
-        newGeo.setAttribute('position', new THREE.Float32BufferAttribute(newPositions, 3));
+        newGeo.setAttribute(
+          "position",
+          new THREE.Float32BufferAttribute(newPositions, 3)
+        );
         newGeo.computeVertexNormals();
 
-        const mats = (mesh as any).userData.mats || createDualMaterials(new THREE.Color(0x00aaff));
-        const newMesh = new THREE.Mesh(newGeo, viewMode === 'solid' ? mats.solid : mats.holo);
+        const mats =
+          (mesh as any).userData.mats ||
+          createDualMaterials(new THREE.Color(0x00aaff));
+        const newMesh = new THREE.Mesh(
+          newGeo,
+          viewMode === "solid" ? mats.solid : mats.holo
+        );
         (newMesh as any).userData = {
-          name: `${(mesh as any).userData.name || 'Part'} - Sub ${idx + 1}`,
-          description: 'Split component.',
-          type: 'Sub-assembly',
-          mats
+          name: `${(mesh as any).userData.name || "Part"} - Sub ${idx + 1}`,
+          description: "Split component.",
+          type: "Sub-assembly",
+          mats,
         };
         newMesh.castShadow = false;
         newMesh.receiveShadow = false;
 
         // Calculate component centroid
         const positions = newGeo.attributes.position;
-        let sumX = 0, sumY = 0, sumZ = 0;
+        let sumX = 0,
+          sumY = 0,
+          sumZ = 0;
         for (let i = 0; i < positions.count; i++) {
           sumX += positions.getX(i);
           sumY += positions.getY(i);
@@ -778,10 +900,14 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         );
 
         // Center the geometry to its own origin so rotation/scaling works from center
-        newGeo.translate(-geometryCenter.x, -geometryCenter.y, -geometryCenter.z);
+        newGeo.translate(
+          -geometryCenter.x,
+          -geometryCenter.y,
+          -geometryCenter.z
+        );
 
         // mats is already defined above (line 694), reusing it.
-        
+
         // newMesh is already defined above (line 695). We are modifying it, but since it was created with newGeo BEFORE translation,
         // the geometry update (translate) will reflect in the mesh.
         // However, we need to update the userData if we wanted to change it, but the previous code set it up correctly.
@@ -793,7 +919,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         componentData.push({
           mesh: newMesh,
           originalLocalPos: localPos.clone(),
-          centroid: geometryCenter.clone()
+          centroid: geometryCenter.clone(),
         });
 
         newMesh.position.copy(localPos);
@@ -803,7 +929,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       // Store exploded view data
       explodedGroupsRef.current.set(newGroup, {
         originalCenter: localCenter,
-        components: componentData
+        components: componentData,
       });
 
       // Enable exploded view
@@ -820,7 +946,11 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     }, 100);
   };
 
-  const applyExplodedView = (group: THREE.Group, componentData: ComponentData[], center: THREE.Vector3) => {
+  const applyExplodedView = (
+    group: THREE.Group,
+    componentData: ComponentData[],
+    center: THREE.Vector3
+  ) => {
     // Center the model at origin
     if (isExploded || explosionDistance <= 0.05) {
       // If exploded view is active, we might need to be careful, but this function is mostly loop/animate
@@ -835,12 +965,12 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       } else {
         direction.subVectors(data.originalLocalPos, center);
       }
-      
+
       const dist = direction.length();
 
       if (dist < 0.001) {
         const angle = (idx / componentData.length) * Math.PI * 2;
-        const elevation = (idx % 3 - 1) * 0.3;
+        const elevation = ((idx % 3) - 1) * 0.3;
         direction.set(
           Math.cos(angle) * Math.cos(elevation),
           Math.sin(elevation),
@@ -884,11 +1014,14 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
 
     // Reset file input to allow re-uploading the same file
     if (event.target) {
-      event.target.value = '';
+      event.target.value = "";
     }
   };
 
-  const setupMultiMeshExplodedView = (group: THREE.Group, meshes: THREE.Mesh[]) => {
+  const setupMultiMeshExplodedView = (
+    group: THREE.Group,
+    meshes: THREE.Mesh[]
+  ) => {
     const componentData: ComponentData[] = [];
     group.updateMatrixWorld();
 
@@ -900,14 +1033,16 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       } else {
         const worldPos = new THREE.Vector3();
         mesh.getWorldPosition(worldPos);
-        const groupInverse = new THREE.Matrix4().copy(group.matrixWorld).invert();
+        const groupInverse = new THREE.Matrix4()
+          .copy(group.matrixWorld)
+          .invert();
         localPos = worldPos.clone().applyMatrix4(groupInverse);
       }
 
       const meshBox = new THREE.Box3().setFromObject(mesh);
       const meshCenter = new THREE.Vector3();
       meshBox.getCenter(meshCenter);
-      
+
       // Convert world center to local center relative to group
       // This ensures that when we use it for direction, it respects the group's transform
       group.worldToLocal(meshCenter);
@@ -915,21 +1050,21 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       componentData.push({
         mesh,
         originalLocalPos: localPos.clone(),
-        centroid: meshCenter.clone()
+        centroid: meshCenter.clone(),
       });
     });
 
     // Calculate average local center based on component centroids
     const localCenter = new THREE.Vector3();
     if (componentData.length > 0) {
-       const box = new THREE.Box3();
-       componentData.forEach(c => box.expandByPoint(c.centroid));
-       box.getCenter(localCenter);
+      const box = new THREE.Box3();
+      componentData.forEach((c) => box.expandByPoint(c.centroid));
+      box.getCenter(localCenter);
     }
 
     explodedGroupsRef.current.set(group, {
       originalCenter: localCenter,
-      components: componentData
+      components: componentData,
     });
   };
 
@@ -940,8 +1075,8 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       sceneRef.current,
       (result) => {
         const output = JSON.stringify(result, null, 2);
-        const blob = new Blob([output], { type: 'text/plain' });
-        const link = document.createElement('a');
+        const blob = new Blob([output], { type: "text/plain" });
+        const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
         link.download = `model-${Date.now()}.glb`;
         link.click();
@@ -951,13 +1086,20 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   };
 
   const identifyPart = async () => {
-    if (!selectedObject || !rendererRef.current || !sceneRef.current || !cameraRef.current) return;
+    if (
+      !selectedObject ||
+      !rendererRef.current ||
+      !sceneRef.current ||
+      !cameraRef.current
+    )
+      return;
 
     // Check cache first
     const userData = (selectedObject as any).userData;
-    if (userData && userData.annotation) {
-        setAnnotationOverlay(userData.annotation);
-        return;
+    if (userData && userData.annotatedImage) {
+      setAnnotatedImage(userData.annotatedImage);
+      setShowAnnotatedModal(true);
+      return;
     }
 
     setIsIdentifying(true);
@@ -967,8 +1109,11 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       // Ensure we render the current isolated view first
       if (composerRef.current) composerRef.current.render();
       else rendererRef.current.render(sceneRef.current, cameraRef.current);
-      
-      const screenshot = rendererRef.current.domElement.toDataURL('image/jpeg', 0.8);
+
+      const screenshot = rendererRef.current.domElement.toDataURL(
+        "image/jpeg",
+        0.8
+      );
 
       // 2. Gather Mesh Data
       const mesh = selectedObject as THREE.Mesh;
@@ -979,58 +1124,68 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       box.getSize(size);
       const center = new THREE.Vector3();
       box.getCenter(center);
-      
+
       const meshAnalysis = {
-        name: (mesh as any).userData.name || 'Unknown Part',
+        name: (mesh as any).userData.name || "Unknown Part",
         position: mesh.position,
         size: { width: size.x, height: size.y, depth: size.z },
         vertexCount: geometry.attributes.position.count,
-        centerPoint: center
+        centerPoint: center,
       };
 
       // 3. Call API
-      const res = await fetch('/api/ai-explain', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/ai-explain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           meshAnalysis,
           modelType: prompt, // Use the search prompt as model type hint
           meshImage: screenshot,
-          searchQuery: prompt
-        })
+          searchQuery: prompt,
+        }),
       });
 
       const data = await res.json();
 
       if (data.error) throw new Error(data.error);
 
+      // Debug logging
+      console.log("API Response received:", {
+        hasAnnotatedImage: !!data.annotatedImage,
+        annotatedImageLength: data.annotatedImage?.length || 0,
+        annotatedImagePreview: data.annotatedImage?.substring(0, 100) || "none",
+      });
+
       // 4. Update Inspector
-      setInspectorData(prev => ({
+      setInspectorData((prev) => ({
         ...prev,
         name: data.name,
         description: data.description,
-        type: data.category
+        type: data.category,
       }));
 
       // 5. Cache data in userData
       if (selectedObject) {
-          (selectedObject as any).userData = {
-              ...(selectedObject as any).userData,
-              name: data.name,
-              description: data.description,
-              type: data.category,
-              annotation: data.svg_overlay || null
-          };
+        (selectedObject as any).userData = {
+          ...(selectedObject as any).userData,
+          name: data.name,
+          description: data.description,
+          type: data.category,
+          annotatedImage: data.annotatedImage || null,
+        };
       }
 
-      // 6. Show overlay
-      if (data.svg_overlay) {
-          setAnnotationOverlay(data.svg_overlay);
+      // 6. Show annotated image in modal
+      if (data.annotatedImage) {
+        console.log("Setting annotated image and showing modal");
+        setAnnotatedImage(data.annotatedImage);
+        setShowAnnotatedModal(true);
+      } else {
+        console.warn("No annotated image in response - modal will not show");
       }
-
     } catch (err) {
-      console.error('Identification failed:', err);
-      alert('Failed to identify part');
+      console.error("Identification failed:", err);
+      alert("Failed to identify part");
     } finally {
       setIsIdentifying(false);
     }
@@ -1041,20 +1196,28 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       <div className="w-full h-full relative">
         {/* Top Controls */}
         <div className="absolute top-0 left-0 w-full z-10 p-4 flex justify-between items-center pointer-events-none">
-           {/* Top Left is empty now as nav is in dashboard layout */}
-           <div></div>
-           
+          {/* Top Left is empty now as nav is in dashboard layout */}
+          <div></div>
+
           <div className="flex items-center gap-2 pointer-events-auto">
             <div className="flex items-center gap-1 bg-[#1D1E15]/5 border border-[#1D1E15]/10 rounded-lg p-1">
               <button
-                onClick={() => setViewMode('holo')}
-                className={`px-2.5 py-1 text-[10px] rounded font-medium transition-colors ${viewMode === 'holo' ? 'bg-[#1D1E15] text-[#E5E6DA]' : 'text-[#1D1E15]/60 hover:text-[#1D1E15]'}`}
+                onClick={() => setViewMode("holo")}
+                className={`px-2.5 py-1 text-[10px] rounded font-medium transition-colors ${
+                  viewMode === "holo"
+                    ? "bg-[#1D1E15] text-[#E5E6DA]"
+                    : "text-[#1D1E15]/60 hover:text-[#1D1E15]"
+                }`}
               >
                 Wireframe
               </button>
               <button
-                onClick={() => setViewMode('solid')}
-                className={`px-2.5 py-1 text-[10px] rounded font-medium transition-colors ${viewMode === 'solid' ? 'bg-[#1D1E15] text-[#E5E6DA]' : 'text-[#1D1E15]/60 hover:text-[#1D1E15]'}`}
+                onClick={() => setViewMode("solid")}
+                className={`px-2.5 py-1 text-[10px] rounded font-medium transition-colors ${
+                  viewMode === "solid"
+                    ? "bg-[#1D1E15] text-[#E5E6DA]"
+                    : "text-[#1D1E15]/60 hover:text-[#1D1E15]"
+                }`}
               >
                 Solid
               </button>
@@ -1070,7 +1233,14 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
               htmlFor="file-input"
               className="px-3 py-1.5 bg-[#DF6C42] text-[#E5E6DA] rounded-lg text-[10px] font-bold hover:bg-[#1D1E15] transition-colors flex items-center gap-1.5 cursor-pointer uppercase tracking-wide"
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="17 8 12 3 7 8" />
                 <line x1="12" y1="3" x2="12" y2="15" />
@@ -1099,7 +1269,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
+                  if (e.key === "Enter") {
                     generateModel(prompt);
                   }
                 }}
@@ -1122,7 +1292,14 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
               onClick={resetView}
               className="px-3 py-1.5 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] rounded-lg text-[10px] font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex items-center gap-1.5 uppercase tracking-wide shadow-sm"
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 12" />
               </svg>
               Reset
@@ -1132,7 +1309,14 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
             onClick={exportGLB}
             className="px-3 py-1.5 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] rounded-lg text-[10px] font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex items-center gap-1.5 uppercase tracking-wide shadow-sm"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" y1="15" x2="12" y2="3" />
@@ -1145,19 +1329,25 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         {showInspector && (
           <div
             className={`absolute top-20 left-4 bottom-20 w-64 bg-[#E5E6DA]/90 border border-[#1D1E15] backdrop-blur-md flex flex-col overflow-hidden transition-transform duration-300 shadow-xl z-20 ${
-              showInspector ? 'translate-x-0' : '-translate-x-full'
+              showInspector ? "translate-x-0" : "-translate-x-full"
             }`}
           >
             <div className="flex-shrink-0 border-b border-[#1D1E15]/20 pb-3 px-4 pt-4">
-              <h2 className="text-base font-bold text-[#1D1E15] mb-1.5 truncate font-sans">{inspectorData.name}</h2>
+              <h2 className="text-base font-bold text-[#1D1E15] mb-1.5 truncate font-sans">
+                {inspectorData.name}
+              </h2>
               <span className="px-1.5 py-0.5 bg-[#DF6C42]/10 border border-[#DF6C42] rounded text-[10px] text-[#DF6C42] font-mono uppercase">
                 {inspectorData.type}
               </span>
             </div>
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 font-mono">
               <div>
-                <h3 className="text-[10px] text-[#1D1E15]/50 uppercase tracking-wider mb-1.5">Description</h3>
-                <p className="text-[10px] text-[#1D1E15] leading-relaxed break-words">{inspectorData.description}</p>
+                <h3 className="text-[10px] text-[#1D1E15]/50 uppercase tracking-wider mb-1.5">
+                  Description
+                </h3>
+                <p className="text-[10px] text-[#1D1E15] leading-relaxed break-words">
+                  {inspectorData.description}
+                </p>
                 <button
                   onClick={identifyPart}
                   disabled={isIdentifying}
@@ -1165,12 +1355,19 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
                 >
                   {isIdentifying ? (
                     <>
-                      <div className="w-2 h-2 border-2 border-current border-t-transparent rounded-full animate-spin"/>
+                      <div className="w-2 h-2 border-2 border-current border-t-transparent rounded-full animate-spin" />
                       Identifying...
                     </>
                   ) : (
                     <>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
                         <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
                       </svg>
                       Identify with AI
@@ -1180,12 +1377,21 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
               </div>
               {showSplitSection && (
                 <div className="mt-2 p-3 bg-[#1D1E15]/5 border border-[#1D1E15]/10 rounded-xl">
-                  <div className="text-[10px] text-[#1D1E15]/70 mb-2 font-bold uppercase tracking-wider">Actions</div>
+                  <div className="text-[10px] text-[#1D1E15]/70 mb-2 font-bold uppercase tracking-wider">
+                    Actions
+                  </div>
                   <button
                     onClick={handleSplitMesh}
                     className="w-full px-3 py-2 bg-[#1D1E15] text-[#E5E6DA] text-[10px] font-bold flex items-center justify-center gap-1.5 mb-2 hover:bg-[#DF6C42] transition-colors uppercase tracking-wide"
                   >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <path d="M21 8v13H3V8" />
                       <path d="M1 3h22v5H1z" />
                       <path d="M10 12h4" />
@@ -1198,18 +1404,20 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
                   {showExplodedControls && (
                     <div className="mt-2 pt-2 border-t border-[#1D1E15]/10">
                       <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-[10px] text-[#1D1E15] font-bold uppercase">Exploded View</label>
+                        <label className="text-[10px] text-[#1D1E15] font-bold uppercase">
+                          Exploded View
+                        </label>
                         <button
                           onClick={() => {
                             setIsExploded(!isExploded);
                           }}
                           className={`px-2 py-1 text-[10px] font-bold uppercase border transition-colors ${
-                            isExploded 
-                              ? 'bg-[#DF6C42] text-[#E5E6DA] border-[#DF6C42]' 
-                              : 'bg-transparent text-[#1D1E15] border-[#1D1E15] hover:bg-[#1D1E15] hover:text-[#E5E6DA]'
+                            isExploded
+                              ? "bg-[#DF6C42] text-[#E5E6DA] border-[#DF6C42]"
+                              : "bg-transparent text-[#1D1E15] border-[#1D1E15] hover:bg-[#1D1E15] hover:text-[#E5E6DA]"
                           }`}
                         >
-                          {isExploded ? 'On' : 'Off'}
+                          {isExploded ? "On" : "Off"}
                         </button>
                       </div>
                       <div className="mt-1.5">
@@ -1222,7 +1430,9 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
                           max="3"
                           step="0.1"
                           value={explosionDistance}
-                          onChange={(e) => setExplosionDistance(parseFloat(e.target.value))}
+                          onChange={(e) =>
+                            setExplosionDistance(parseFloat(e.target.value))
+                          }
                           className="w-full h-1 bg-[#1D1E15]/20 rounded-lg appearance-none cursor-pointer accent-[#DF6C42]"
                         />
                       </div>
@@ -1232,12 +1442,20 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
               )}
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-[#1D1E15]/5 p-2 border border-[#1D1E15]/10">
-                  <div className="text-[10px] text-[#1D1E15]/50 mb-1 uppercase">Geometry</div>
-                  <div className="text-[#1D1E15] font-bold text-[10px]">High Poly</div>
+                  <div className="text-[10px] text-[#1D1E15]/50 mb-1 uppercase">
+                    Geometry
+                  </div>
+                  <div className="text-[#1D1E15] font-bold text-[10px]">
+                    High Poly
+                  </div>
                 </div>
                 <div className="bg-[#1D1E15]/5 p-2 border border-[#1D1E15]/10">
-                  <div className="text-[10px] text-[#1D1E15]/50 mb-1 uppercase">Status</div>
-                  <div className="text-[#1D1E15] font-bold text-[10px]">Active</div>
+                  <div className="text-[10px] text-[#1D1E15]/50 mb-1 uppercase">
+                    Status
+                  </div>
+                  <div className="text-[#1D1E15] font-bold text-[10px]">
+                    Active
+                  </div>
                 </div>
               </div>
             </div>
@@ -1245,32 +1463,75 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         )}
 
         {/* Tooltip */}
-        <div 
+        <div
           ref={tooltipRef}
           className="fixed z-50 px-3 py-2 bg-[#1D1E15] text-[#E5E6DA] border border-[#1D1E15] text-xs font-mono uppercase tracking-wide pointer-events-none opacity-0 transition-opacity duration-150 shadow-lg"
           style={{ top: 0, left: 0 }}
         />
 
         {/* Canvas Container */}
-        <div 
-          ref={containerRef} 
-          className="w-full h-full relative" 
+        <div
+          ref={containerRef}
+          className="w-full h-full relative"
           onClick={handleClick}
           onMouseMove={handleMouseMove}
         />
 
-        {/* Annotation Overlay */}
-        {annotationOverlay && (
-             <div 
-                className="absolute inset-0 z-5 pointer-events-none animate-in fade-in duration-500"
-                dangerouslySetInnerHTML={{ __html: annotationOverlay }}
-             />
+        {/* Annotated Image Modal */}
+        {showAnnotatedModal && annotatedImage && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[#1D1E15]/80 backdrop-blur-sm animate-in fade-in duration-300"
+            onClick={() => setShowAnnotatedModal(false)}
+          >
+            <div
+              className="relative max-w-4xl max-h-[90vh] bg-[#E5E6DA] border-2 border-[#1D1E15] rounded-lg shadow-2xl overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Close button */}
+              <button
+                onClick={() => setShowAnnotatedModal(false)}
+                className="absolute top-2 right-2 z-10 w-8 h-8 bg-[#1D1E15] text-[#E5E6DA] rounded-full flex items-center justify-center hover:bg-[#DF6C42] transition-colors"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+
+              {/* Image */}
+              <div className="relative w-full">
+                <img
+                  src={annotatedImage}
+                  alt="Annotated brain part"
+                  className="w-full h-auto object-contain"
+                />
+              </div>
+
+              {/* Caption */}
+              <div className="px-6 py-4 border-t border-[#1D1E15]/20">
+                <h3 className="text-sm font-bold text-[#1D1E15] mb-2 font-sans">
+                  {inspectorData.name}
+                </h3>
+                <p className="text-xs text-[#1D1E15]/80 leading-relaxed font-mono">
+                  {inspectorData.description}
+                </p>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Loader */}
-        {loading && <BlockyLoader onFinished={() => setAnimationFinished(true)} />}
+        {loading && (
+          <BlockyLoader onFinished={() => setAnimationFinished(true)} />
+        )}
       </div>
     </div>
   );
 }
-
