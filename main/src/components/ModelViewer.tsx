@@ -11,6 +11,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { SimpleNoise } from '@/lib/three/SimpleNoise';
+import BlockyLoader from './BlockyLoader';
 
 interface ComponentData {
   mesh: THREE.Mesh;
@@ -42,6 +43,8 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   const [showSplitSection, setShowSplitSection] = useState(false);
   const [showExplodedControls, setShowExplodedControls] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [modelReady, setModelReady] = useState(false);
+  const [animationFinished, setAnimationFinished] = useState(false);
 
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -815,9 +818,22 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     });
   }, [isExploded, explosionDistance]);
 
+  useEffect(() => {
+    if (modelReady && animationFinished) {
+      setLoading(false);
+      // Reset states for next load
+      setModelReady(false);
+      setAnimationFinished(false);
+    }
+  }, [modelReady, animationFinished]);
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !sceneRef.current) return;
+
+    setLoading(true); // Start loading animation
+    setModelReady(false);
+    setAnimationFinished(false);
 
     const url = URL.createObjectURL(file);
     const loader = new GLTFLoader();
@@ -902,12 +918,19 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         if (event.target) {
           event.target.value = '';
         }
+        
+        setModelReady(true);
       },
-      undefined,
+      (progress) => {
+         // Optional: Update progress if BlockyLoader supports prop-based progress
+         // For now BlockyLoader simulates progress, which is fine for local loads
+         console.log('Loading progress:', (progress.loaded / progress.total * 100) + '%');
+      },
       (error) => {
         console.error('Error loading file:', error);
         alert('Error loading file. Please check the console for details.');
         URL.revokeObjectURL(url);
+        setLoading(false);
         // Reset file input on error too
         if (event.target) {
           event.target.value = '';
@@ -1179,12 +1202,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         />
 
         {/* Loader */}
-        {loading && (
-          <div className="fixed inset-0 bg-[#E5E6DA]/90 backdrop-blur-sm z-50 flex flex-col justify-center items-center text-[#1D1E15]">
-            <div className="text-lg font-bold mb-2 uppercase tracking-widest">Processing geometry...</div>
-            <div className="text-xs font-mono text-[#1D1E15]/60">Analyzing connectivity & splitting meshes</div>
-          </div>
-        )}
+        {loading && <BlockyLoader onFinished={() => setAnimationFinished(true)} />}
       </div>
     </div>
   );
