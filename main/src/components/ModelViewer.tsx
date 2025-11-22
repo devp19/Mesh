@@ -98,7 +98,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.shadowMap.enabled = true; // Enable shadows for depth
+    renderer.shadowMap.enabled = false; // Disable shadows
     renderer.setClearColor(0xE5E6DA, 1);
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
@@ -115,9 +115,9 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
 
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
     dirLight.position.set(10, 20, 10);
-    dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 2048;
-    dirLight.shadow.mapSize.height = 2048;
+    dirLight.castShadow = false;
+    // dirLight.shadow.mapSize.width = 2048;
+    // dirLight.shadow.mapSize.height = 2048;
     scene.add(dirLight);
 
     const accentLight = new THREE.SpotLight(0xDF6C42, 2); // Orange accent
@@ -126,15 +126,17 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     scene.add(accentLight);
 
     // Shadow plane
+    /*
     const planeGeo = new THREE.PlaneGeometry(50, 50);
     const planeMat = new THREE.ShadowMaterial({ opacity: 0.1, color: 0x1D1E15 }); // Dark shadow on light bg
     const shadowPlane = new THREE.Mesh(planeGeo, planeMat);
     shadowPlane.rotation.x = -Math.PI / 2;
     shadowPlane.position.y = -4;
-    shadowPlane.receiveShadow = true;
+    shadowPlane.receiveShadow = false;
     shadowPlane.visible = false; // Controlled by view mode
     scene.add(shadowPlane);
     shadowPlaneRef.current = shadowPlane;
+    */
 
     // Post-processing
     const renderScene = new RenderPass(scene, camera);
@@ -472,7 +474,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   };
 
   const updateViewMode = () => {
-    if (!sceneRef.current || !bloomPassRef.current || !shadowPlaneRef.current || !rendererRef.current) return;
+    if (!sceneRef.current || !bloomPassRef.current || !rendererRef.current) return;
 
     const isSolid = viewMode === 'solid';
     
@@ -484,7 +486,9 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     rendererRef.current.setClearColor(0xE5E6DA, 1);
     
     // Shadows only in solid mode
-    shadowPlaneRef.current.visible = isSolid;
+    if (shadowPlaneRef.current) {
+        shadowPlaneRef.current.visible = false;
+    }
 
     generatedObjectsRef.current.forEach(group => {
       group.traverse(child => {
@@ -506,8 +510,8 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
           }
 
           mesh.material = isSolid ? mats.solid : mats.holo;
-          mesh.castShadow = isSolid; // Shadows only in solid mode
-          mesh.receiveShadow = isSolid;
+          mesh.castShadow = false; // Shadows only in solid mode
+          mesh.receiveShadow = false;
         }
       });
     });
