@@ -772,17 +772,14 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   };
 
   const applyExplodedView = (group: THREE.Group, componentData: ComponentData[], center: THREE.Vector3) => {
-    // If not exploded OR distance is near zero, reset to original positions
-    if (!isExploded || explosionDistance <= 0.05) {
-      componentData.forEach(data => {
-        data.mesh.position.copy(data.originalLocalPos);
-      });
-      return;
+    // Center the model at origin
+    if (isExploded || explosionDistance <= 0.05) {
+      // If exploded view is active, we might need to be careful, but this function is mostly loop/animate
+      // For now, relying on the stored data.
     }
 
     componentData.forEach((data, idx) => {
       // Calculate direction from center
-      // Use centroid if available, else fallback to original position as vector
       let direction = data.originalLocalPos.clone();
       if (data.centroid && data.centroid.lengthSq() > 0.0001) {
           direction.copy(data.centroid);
@@ -802,8 +799,12 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         direction.normalize();
       }
 
-      const offset = direction.multiplyScalar(explosionDistance);
-      // Use clone() to avoid mutating originalLocalPos by accident if it was referenced
+      // Adjust explosion distance by model scale to ensure consistent visual displacement
+      // regardless of the model's original size or the applied normalization scale.
+      const scale = group.scale.x || 1;
+      const adjustedDistance = explosionDistance / scale;
+
+      const offset = direction.multiplyScalar(adjustedDistance);
       data.mesh.position.copy(data.originalLocalPos).add(offset);
     });
   };
@@ -839,15 +840,23 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         const center = new THREE.Vector3();
         box.getCenter(center);
 
-        // Center the model at origin
-        model.position.x = -center.x;
-        model.position.y = -center.y;
-        model.position.z = -center.z;
-
-        // Scale to fit
+        // Scale to fit (Target size ~4 units)
         const maxDim = Math.max(size.x, size.y, size.z);
-        const scale = 4 / maxDim;
+        const scale = 4 / (maxDim || 1);
         model.scale.set(scale, scale, scale);
+
+        // Center the model at origin
+        // We translate the model such that its visual center moves to (0,0,0)
+        // The position offset must be -center * scale because the position is in parent space
+        // but the geometry is offset by 'center' in local unscaled space? 
+        // No, 'center' is in World Space from setFromObject.
+        // Since model is at (0,0,0) identity, World Center ~= Local Center * Scale? 
+        // Actually setFromObject on unscaled model gives unscaled center.
+        // So we scale it, then negate.
+        model.position.copy(center).multiplyScalar(-scale);
+        
+        // Ensure matrix is updated for subsequent calculations
+        model.updateMatrixWorld(true);
 
         const meshes: THREE.Mesh[] = [];
         model.traverse((child) => {
@@ -874,6 +883,12 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
 
         sceneRef.current!.add(model);
         generatedObjectsRef.current.push(model);
+        
+        // Reset controls to ensure the model is in view
+        if (controlsRef.current) {
+            controlsRef.current.reset();
+        }
+        
         updateViewMode();
 
         // Setup multi-mesh exploded view if needed
@@ -924,6 +939,10 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       const meshBox = new THREE.Box3().setFromObject(mesh);
       const meshCenter = new THREE.Vector3();
       meshBox.getCenter(meshCenter);
+      
+      // Convert world center to local center relative to group
+      // This ensures that when we use it for direction, it respects the group's transform
+      group.worldToLocal(meshCenter);
 
       componentData.push({
         mesh,
