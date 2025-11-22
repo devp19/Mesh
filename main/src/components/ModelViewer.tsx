@@ -10,7 +10,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
-import { SimpleNoise } from '@/lib/three/SimpleNoise';
+import BlockyLoader from './BlockyLoader';
 
 interface ComponentData {
   mesh: THREE.Mesh;
@@ -42,6 +42,8 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   const [showSplitSection, setShowSplitSection] = useState(false);
   const [showExplodedControls, setShowExplodedControls] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [modelReady, setModelReady] = useState(false);
+  const [animationFinished, setAnimationFinished] = useState(false);
 
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -55,7 +57,6 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   const raycasterRef = useRef<THREE.Raycaster | null>(null);
   const mouseRef = useRef<THREE.Vector2>(new THREE.Vector2());
   const explodedGroupsRef = useRef<Map<THREE.Group, ExplodedGroupData>>(new Map());
-  const noiseGenRef = useRef<SimpleNoise>(new SimpleNoise());
   const animationFrameRef = useRef<number | null>(null);
   const isIsolatingRef = useRef(false);
   const selectedObjectRef = useRef<THREE.Object3D | null>(null);
@@ -161,7 +162,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     // Initial model
     // generateModel is defined below, but available in useEffect due to closure scope if defined with var/function or const in outer scope?
     // Actually const functions are not hoisted. BUT useEffect runs after render, so generateModel will be defined.
-    setTimeout(() => generateModel('Brain'), 0);
+    // setTimeout(() => generateModel('Brain'), 0);
 
     // Animation loop
     const animate = () => {
@@ -169,9 +170,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       if (controlsRef.current) controlsRef.current.update();
       if (composerRef.current) composerRef.current.render();
       
-      if (!isIsolatingRef.current && generatedObjectsRef.current.length > 0) {
-        generatedObjectsRef.current[0].rotation.y += 0.001;
-      }
+      // Auto-rotation removed to prevent interference with inspection
     };
     animate();
 
@@ -295,150 +294,181 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     return { holo, solid };
   };
 
-  const generateModel = (prompt: string) => {
+  const loadModelFromUrl = (url: string, isBlob: boolean = false) => {
     if (!sceneRef.current) return;
 
+    setLoading(true);
+    setModelReady(false);
+    setAnimationFinished(false);
+
+    const loader = new GLTFLoader();
+
+    // Clear existing models
     generatedObjectsRef.current.forEach(obj => sceneRef.current!.remove(obj));
     generatedObjectsRef.current = [];
+    explodedGroupsRef.current.clear();
     resetView();
 
-    const lowerPrompt = prompt.toLowerCase();
-    let archetype = 'default';
-    if (['brain', 'neuron', 'mind', 'cortex', 'lobe'].some(k => lowerPrompt.includes(k))) archetype = 'brain';
-    else if (['engine', 'motor', 'machine', 'piston', 'gear'].some(k => lowerPrompt.includes(k))) archetype = 'mechanical';
-    else if (['cell', 'nucleus', 'bacteria', 'virus'].some(k => lowerPrompt.includes(k))) archetype = 'cellular';
+    loader.load(
+      url,
+      (gltf) => {
+        const model = gltf.scene;
+        
+        // Flatten hierarchy to ensure Split Mesh works correctly
+        const flatGroup = new THREE.Group();
+        const meshes: THREE.Mesh[] = [];
 
-    const mainGroup = new THREE.Group();
-    sceneRef.current.add(mainGroup);
-    generatedObjectsRef.current.push(mainGroup);
+        // 1. Update world matrices to capture current transforms
+        model.updateMatrixWorld(true);
 
-    if (archetype === 'brain') createHighResBrain(mainGroup);
-    else if (archetype === 'mechanical') createSolidEngine(mainGroup);
-    else if (archetype === 'cellular') createSolidCell(mainGroup);
-    else createDefaultAbstract(mainGroup);
+        // 2. Collect all meshes
+        model.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+             meshes.push(child as THREE.Mesh);
+          }
+        });
 
-    updateViewMode();
-  };
+        // 3. Move meshes to flat group, preserving world transform
+        meshes.forEach((mesh) => {
+           const worldMatrix = mesh.matrixWorld.clone();
+           
+           // Create dual materials while we're here
+           const originalMat = mesh.material as THREE.MeshStandardMaterial;
+           const baseColor = originalMat.color ? originalMat.color : new THREE.Color(0x00aaff);
+           const mats = createDualMaterials(baseColor, 0.5, 0.2);
+           if (originalMat.map) mats.solid = originalMat;
 
-  const createHighResBrain = (group: THREE.Group) => {
-    const lobes = [
-      { name: 'Frontal Left', col: 0xddaa88, xMult: -1, zOff: 0.8, yOff: 0.2, scale: [1, 1.1, 1.2], type: 'Cognition' },
-      { name: 'Frontal Right', col: 0xddaa88, xMult: 1, zOff: 0.8, yOff: 0.2, scale: [1, 1.1, 1.2], type: 'Cognition' },
-      { name: 'Parietal Left', col: 0xcc9988, xMult: -1, zOff: -0.5, yOff: 0.8, scale: [0.9, 1, 1], type: 'Sensation' },
-      { name: 'Parietal Right', col: 0xcc9988, xMult: 1, zOff: -0.5, yOff: 0.8, scale: [0.9, 1, 1], type: 'Sensation' },
-      { name: 'Temporal Left', col: 0xbb8877, xMult: -1, zOff: 0.2, yOff: -0.8, scale: [0.8, 0.8, 1.4], type: 'Memory' },
-      { name: 'Temporal Right', col: 0xbb8877, xMult: 1, zOff: 0.2, yOff: -0.8, scale: [0.8, 0.8, 1.4], type: 'Memory' },
-      { name: 'Occipital Left', col: 0xaa7766, xMult: -1, zOff: -1.8, yOff: 0, scale: [0.9, 0.9, 0.9], type: 'Vision' },
-      { name: 'Occipital Right', col: 0xaa7766, xMult: 1, zOff: -1.8, yOff: 0, scale: [0.9, 0.9, 0.9], type: 'Vision' },
-    ];
+           // Apply new material
+           mesh.material = mats.solid; // Default to solid for now
+           (mesh as any).userData = {
+              mats,
+              name: mesh.name || `Part ${meshes.length}`,
+              description: 'Imported Geometry',
+              type: 'Imported'
+           };
+           mesh.castShadow = false;
+           mesh.receiveShadow = false;
 
-    lobes.forEach(lobe => {
-      const geometry = new THREE.SphereGeometry(1.4, 64, 64);
-      const pos = geometry.attributes.position;
-      for (let i = 0; i < pos.count; i++) {
-        const v = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i));
-        if (Math.sign(v.x) !== Math.sign(lobe.xMult)) v.x *= 0.05;
-        const coarse = noiseGenRef.current.fbm(v.x * 0.5, v.y * 0.5, v.z * 0.5, 1);
-        const fine = noiseGenRef.current.fbm(v.x * 3, v.y * 3, v.z * 3, 3);
-        v.multiplyScalar(1 + (coarse * 0.1) + (fine * 0.05));
-        v.x *= lobe.scale[0];
-        v.y *= lobe.scale[1];
-        v.z *= lobe.scale[2];
-        v.x += lobe.xMult * 0.4;
-        v.y += lobe.yOff;
-        v.z += lobe.zOff;
-        pos.setXYZ(i, v.x, v.y, v.z);
+           // Add to flat group
+           flatGroup.add(mesh);
+           
+           // Apply world transform
+           // Since flatGroup is at identity (0,0,0), setting local matrix to world matrix works
+           mesh.matrix.copy(worldMatrix);
+           mesh.matrix.decompose(mesh.position, mesh.quaternion, mesh.scale);
+           mesh.updateMatrixWorld();
+        });
+
+        // 4. Center and scale the flat group
+        const box = new THREE.Box3().setFromObject(flatGroup);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+
+        // Scale to fit (Target size ~4 units)
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const scale = 4 / (maxDim || 1);
+        flatGroup.scale.set(scale, scale, scale);
+
+        // Center the model at origin
+        flatGroup.position.copy(center).multiplyScalar(-scale);
+        flatGroup.updateMatrixWorld(true);
+
+        sceneRef.current!.add(flatGroup);
+        generatedObjectsRef.current.push(flatGroup);
+        
+        if (controlsRef.current) {
+            controlsRef.current.reset();
+        }
+        
+        updateViewMode();
+
+        if (meshes.length > 1) {
+          setupMultiMeshExplodedView(flatGroup, meshes);
+        }
+
+        if (isBlob) {
+          URL.revokeObjectURL(url);
+        }
+        
+        setModelReady(true);
+      },
+      (progress) => {
+         // Optional logging
+      },
+      (error) => {
+        console.error('Error loading file:', error);
+        alert('Error loading file. See console.');
+        if (isBlob) {
+          URL.revokeObjectURL(url);
+        }
+        setLoading(false);
       }
-      geometry.computeVertexNormals();
-      const mats = createDualMaterials(new THREE.Color(lobe.col), 0.6, 0.0);
-      const mesh = new THREE.Mesh(geometry, mats.holo);
-      (mesh as any).userData = {
-        name: lobe.name,
-        description: `Key region for ${lobe.type.toLowerCase()} processing.`,
-        type: 'Cortex',
-        mats
-      };
-      group.add(mesh);
-    });
-
-    const stemGeo = new THREE.CylinderGeometry(0.6, 0.5, 3, 32);
-    const stemMats = createDualMaterials(new THREE.Color(0xdddddd), 0.5, 0);
-    const stem = new THREE.Mesh(stemGeo, stemMats.holo);
-    stem.position.set(0, -2.5, -0.5);
-    stem.rotation.x = 0.2;
-    (stem as any).userData = { name: 'Brain Stem', description: 'Central Trunk.', type: 'Stem', mats: stemMats };
-    group.add(stem);
-
-    const cerGeo = new THREE.SphereGeometry(1.2, 48, 48);
-    const cerPos = cerGeo.attributes.position;
-    for (let i = 0; i < cerPos.count; i++) {
-      const x = cerPos.getX(i), y = cerPos.getY(i), z = cerPos.getZ(i);
-      const ridges = Math.sin(y * 20 + x * 5);
-      cerPos.setXYZ(i, x * (1 + ridges * 0.02), y * 0.6, z * (1 + ridges * 0.02));
-    }
-    cerGeo.computeVertexNormals();
-    const cerMats = createDualMaterials(new THREE.Color(0xcc8866), 0.7, 0);
-    const cer = new THREE.Mesh(cerGeo, cerMats.holo);
-    cer.position.set(0, -2, -1.5);
-    (cer as any).userData = { name: 'Cerebellum', description: 'Motor control center.', type: 'Hindbrain', mats: cerMats };
-    group.add(cer);
+    );
   };
 
-  const createSolidEngine = (group: THREE.Group) => {
-    const blockGeo = new THREE.BoxGeometry(3.5, 2.5, 5.5);
-    const blockMats = createDualMaterials(new THREE.Color(0x8899aa), 0.3, 0.8);
-    const block = new THREE.Mesh(blockGeo, blockMats.holo);
-    (block as any).userData = { name: 'Engine Block', description: 'Cast aluminum housing.', type: 'Chassis', mats: blockMats };
-    group.add(block);
+  const generateModel = async (prompt: string) => {
+    if (!sceneRef.current || !prompt.trim()) return;
 
-    for (let i = 0; i < 4; i++) {
-      const cylGeo = new THREE.CylinderGeometry(0.5, 0.5, 1.5, 32);
-      const cylMats = createDualMaterials(new THREE.Color(0xffffff), 0.1, 1.0);
-      const cyl = new THREE.Mesh(cylGeo, cylMats.holo);
-      cyl.position.set(0, 1.5, -1.5 + i);
-      (cyl as any).userData = { name: `Piston #${i + 1}`, description: 'Forged steel piston.', type: 'Moving Part', mats: cylMats };
-      group.add(cyl);
+    setLoading(true);
+    
+    try {
+      console.log('Searching for:', prompt);
+      const searchRes = await fetch(`/api/search?q=${encodeURIComponent(prompt)}`);
+      const searchData = await searchRes.json();
+      
+      if (!searchRes.ok) {
+        throw new Error(searchData.error + (searchData.details ? `: ${JSON.stringify(searchData.details)}` : '') || 'Search failed');
+      }
+      
+      if (!searchData.uid) {
+        alert('No 3D model found for this prompt.');
+        setLoading(false);
+        return;
+      }
+      
+      console.log('Found UID:', searchData.uid);
+      const downloadRes = await fetch(`/api/download?uid=${searchData.uid}`);
+      const downloadData = await downloadRes.json();
+      
+      if (!downloadRes.ok || !downloadData.success) {
+         if (downloadData.potentialUrls && downloadData.potentialUrls.length > 0) {
+             console.log('Using potential URL fallback');
+             // potentialUrls might be an array of strings. We need to find the best one.
+             // Filter for .glb or .gltf if possible
+             const bestUrl = downloadData.potentialUrls.find((u: string) => u.includes('.glb')) || 
+                             downloadData.potentialUrls.find((u: string) => u.includes('.gltf')) || 
+                             downloadData.potentialUrls[0];
+             
+             loadModelFromUrl(bestUrl, false);
+             return;
+         }
+         throw new Error(downloadData.message || 'Failed to get download URL');
+      }
+      
+      // Extract URL
+      let modelUrl = downloadData.data.glb?.url || downloadData.data.gltf?.url;
+      
+      // Fallback: sometimes the structure is directly inside the data if the endpoint returned different format
+      if (!modelUrl && downloadData.data.gltf) {
+          modelUrl = downloadData.data.gltf.url;
+      }
+      
+      if (!modelUrl) {
+         // If we have a successful response but no direct GLB/GLTF url in standard location
+         console.warn('Standard URL location failed, checking alternatives in response data...', downloadData);
+         throw new Error('No compatible model format (GLB/GLTF) found in API response.');
+      }
+      
+      console.log('Loading model from:', modelUrl);
+      loadModelFromUrl(modelUrl, false);
+      
+    } catch (error) {
+      console.error('Generation error:', error);
+      alert('Failed to generate model. ' + (error instanceof Error ? error.message : ''));
+      setLoading(false);
     }
-
-    const pipeGeo = new THREE.TorusKnotGeometry(1, 0.2, 64, 8, 2, 3);
-    const pipeMats = createDualMaterials(new THREE.Color(0xaa4422), 0.8, 0.4);
-    const pipe = new THREE.Mesh(pipeGeo, pipeMats.holo);
-    pipe.position.set(2, 0, 0);
-    pipe.scale.set(0.5, 1, 1);
-    (pipe as any).userData = { name: 'Exhaust Manifold', description: 'High temp alloy.', type: 'Exhaust', mats: pipeMats };
-    group.add(pipe);
-  };
-
-  const createSolidCell = (group: THREE.Group) => {
-    const memGeo = new THREE.IcosahedronGeometry(3, 4);
-    const pos = memGeo.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      const v = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i));
-      v.multiplyScalar(1 + noiseGenRef.current.noise(v.x, v.y, v.z) * 0.1);
-      pos.setXYZ(i, v.x, v.y, v.z);
-    }
-    memGeo.computeVertexNormals();
-    const memHolo = new THREE.MeshPhysicalMaterial({ color: 0x00ffaa, wireframe: true, transparent: true, opacity: 0.2 });
-    const memSolid = new THREE.MeshPhysicalMaterial({
-      color: 0x44ffbb, transmission: 0.8, thickness: 1.0, roughness: 0.2, ior: 1.33, transparent: true, opacity: 1
-    });
-    const membrane = new THREE.Mesh(memGeo, memHolo);
-    (membrane as any).userData = { name: 'Cell Membrane', description: 'Phospholipid bilayer.', type: 'Membrane', mats: { holo: memHolo, solid: memSolid } };
-    group.add(membrane);
-
-    const nucGeo = new THREE.SphereGeometry(1, 32, 32);
-    const nucMats = createDualMaterials(new THREE.Color(0xff0088), 0.4, 0.1);
-    const nuc = new THREE.Mesh(nucGeo, nucMats.holo);
-    (nuc as any).userData = { name: 'Nucleus', description: 'Genetic center.', type: 'Organelle', mats: nucMats };
-    group.add(nuc);
-  };
-
-  const createDefaultAbstract = (group: THREE.Group) => {
-    const geo = new THREE.IcosahedronGeometry(2, 1);
-    const mats = createDualMaterials(new THREE.Color(0x00ffff));
-    const mesh = new THREE.Mesh(geo, mats.holo);
-    (mesh as any).userData = { name: 'Data Node', description: 'Abstract representation.', type: 'Node', mats };
-    group.add(mesh);
   };
 
   const updateViewMode = () => {
@@ -815,105 +845,26 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     });
   }, [isExploded, explosionDistance]);
 
+  useEffect(() => {
+    if (modelReady && animationFinished) {
+      setLoading(false);
+      // Reset states for next load
+      setModelReady(false);
+      setAnimationFinished(false);
+    }
+  }, [modelReady, animationFinished]);
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !sceneRef.current) return;
 
     const url = URL.createObjectURL(file);
-    const loader = new GLTFLoader();
+    loadModelFromUrl(url, true);
 
-    // Clear existing models
-    generatedObjectsRef.current.forEach(obj => sceneRef.current!.remove(obj));
-    generatedObjectsRef.current = [];
-    explodedGroupsRef.current.clear();
-    resetView();
-
-    loader.load(
-      url,
-      (gltf) => {
-        const model = gltf.scene;
-
-        // Calculate bounding box and center
-        const box = new THREE.Box3().setFromObject(model);
-        const size = new THREE.Vector3();
-        box.getSize(size);
-        const center = new THREE.Vector3();
-        box.getCenter(center);
-
-        // Scale to fit (Target size ~4 units)
-        const maxDim = Math.max(size.x, size.y, size.z);
-        const scale = 4 / (maxDim || 1);
-        model.scale.set(scale, scale, scale);
-
-        // Center the model at origin
-        // We translate the model such that its visual center moves to (0,0,0)
-        // The position offset must be -center * scale because the position is in parent space
-        // but the geometry is offset by 'center' in local unscaled space? 
-        // No, 'center' is in World Space from setFromObject.
-        // Since model is at (0,0,0) identity, World Center ~= Local Center * Scale? 
-        // Actually setFromObject on unscaled model gives unscaled center.
-        // So we scale it, then negate.
-        model.position.copy(center).multiplyScalar(-scale);
-        
-        // Ensure matrix is updated for subsequent calculations
-        model.updateMatrixWorld(true);
-
-        const meshes: THREE.Mesh[] = [];
-        model.traverse((child) => {
-          if ((child as THREE.Mesh).isMesh) {
-            const mesh = child as THREE.Mesh;
-            meshes.push(mesh);
-            const originalMat = mesh.material as THREE.MeshStandardMaterial;
-            const baseColor = originalMat.color ? originalMat.color : new THREE.Color(0x00aaff);
-
-            const mats = createDualMaterials(baseColor, 0.5, 0.2);
-            if (originalMat.map) mats.solid = originalMat;
-
-            (mesh as any).userData = {
-              mats,
-              name: mesh.name || `Imported Part ${meshes.length}`,
-              description: 'Imported Mesh Geometry',
-              type: 'Imported'
-            };
-
-            mesh.castShadow = false;
-            mesh.receiveShadow = false;
-          }
-        });
-
-        sceneRef.current!.add(model);
-        generatedObjectsRef.current.push(model);
-        
-        // Reset controls to ensure the model is in view
-        if (controlsRef.current) {
-            controlsRef.current.reset();
-        }
-        
-        updateViewMode();
-
-        // Setup multi-mesh exploded view if needed
-        if (meshes.length > 1) {
-          setupMultiMeshExplodedView(model as THREE.Group, meshes);
-        }
-
-        URL.revokeObjectURL(url);
-        
-        // Reset file input to allow re-uploading the same file
-        if (event.target) {
-          event.target.value = '';
-        }
-      },
-      undefined,
-      (error) => {
-        console.error('Error loading file:', error);
-        alert('Error loading file. Please check the console for details.');
-        URL.revokeObjectURL(url);
-        // Reset file input on error too
-        if (event.target) {
-          event.target.value = '';
-        }
-      }
-    );
+    // Reset file input to allow re-uploading the same file
+    if (event.target) {
+      event.target.value = '';
+    }
   };
 
   const setupMultiMeshExplodedView = (group: THREE.Group, meshes: THREE.Mesh[]) => {
@@ -1179,12 +1130,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         />
 
         {/* Loader */}
-        {loading && (
-          <div className="fixed inset-0 bg-[#E5E6DA]/90 backdrop-blur-sm z-50 flex flex-col justify-center items-center text-[#1D1E15]">
-            <div className="text-lg font-bold mb-2 uppercase tracking-widest">Processing geometry...</div>
-            <div className="text-xs font-mono text-[#1D1E15]/60">Analyzing connectivity & splitting meshes</div>
-          </div>
-        )}
+        {loading && <BlockyLoader onFinished={() => setAnimationFinished(true)} />}
       </div>
     </div>
   );
