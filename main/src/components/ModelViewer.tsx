@@ -10,7 +10,9 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import * as BufferGeometryUtils from "three/addons/utils/BufferGeometryUtils.js";
+import { AnimatePresence } from "framer-motion";
 import BlockyLoader from "./BlockyLoader";
+import AIInferenceLoader from "./AIInferenceLoader";
 
 interface ComponentData {
   mesh: THREE.Mesh;
@@ -56,6 +58,11 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   const [isIdentifying, setIsIdentifying] = useState(false);
   const [showAnnotatedModal, setShowAnnotatedModal] = useState(false);
   const [annotatedImage, setAnnotatedImage] = useState<string | null>(null);
+  const [showInferenceLoader, setShowInferenceLoader] = useState(false);
+  const showInferenceLoaderRef = useRef(false);
+  useEffect(() => { showInferenceLoaderRef.current = showInferenceLoader; }, [showInferenceLoader]);
+
+  const [inferenceLoaderReady, setInferenceLoaderReady] = useState(false);
   const [objConnected, setObjConnected] = useState(false);
   const [camConnected, setCamConnected] = useState(false);
   const [objDeviceName, setObjDeviceName] = useState<string>("—");
@@ -504,7 +511,8 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       lastT = now;
 
       // Update camera based on stick inputs if connected (use refs for real-time checking)
-      if (objConnectedRef.current || camConnectedRef.current) {
+      // Pause stick control if inference loader is active (to allow auto-rotation)
+      if ((objConnectedRef.current || camConnectedRef.current) && !showInferenceLoaderRef.current) {
         const state = cameraStateRef.current;
         const camera = cameraRef.current;
         
@@ -625,6 +633,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
 
   const handleMouseMove = (event: React.MouseEvent) => {
     if (
+      showInferenceLoader || 
       !containerRef.current ||
       !raycasterRef.current ||
       !cameraRef.current ||
@@ -685,7 +694,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   };
 
   const handleClick = (event: React.MouseEvent) => {
-    if (!raycasterRef.current || !cameraRef.current || !sceneRef.current)
+    if (showInferenceLoader || !raycasterRef.current || !cameraRef.current || !sceneRef.current)
       return;
 
     raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
@@ -1484,6 +1493,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     }
 
     setIsIdentifying(true);
+    setShowInferenceLoader(true);
 
     try {
       // 1. Capture Image
@@ -1560,15 +1570,26 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       if (data.annotatedImage) {
         console.log("Setting annotated image and showing modal");
         setAnnotatedImage(data.annotatedImage);
-        setShowAnnotatedModal(true);
       } else {
         console.warn("No annotated image in response - modal will not show");
       }
+
+      // Signal loader to complete and close
+      setIsIdentifying(false);
+      setInferenceLoaderReady(true);
+      // Wait for loader animation to complete
+      setTimeout(() => {
+        setShowInferenceLoader(false);
+        setInferenceLoaderReady(false);
+        if (data.annotatedImage) {
+          setShowAnnotatedModal(true);
+        }
+      }, 1500);
     } catch (err) {
       console.error("Identification failed:", err);
-      alert("Failed to identify part");
-    } finally {
       setIsIdentifying(false);
+      setShowInferenceLoader(false);
+      alert("Failed to identify part");
     }
   };
 
@@ -1982,6 +2003,23 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         {loading && (
           <BlockyLoader onFinished={() => setAnimationFinished(true)} />
         )}
+
+        {/* AI Inference Loader */}
+        <AnimatePresence>
+          {showInferenceLoader && (
+            <AIInferenceLoader
+              objectName={(selectedObject as any)?.userData?.name || "Selected Object"}
+              shouldClose={inferenceLoaderReady}
+              onFinished={() => setShowInferenceLoader(false)}
+              scene={sceneRef.current}
+              camera={cameraRef.current}
+              renderer={rendererRef.current}
+              composer={composerRef.current}
+              allObjects={generatedObjectsRef.current}
+              controls={controlsRef.current}
+            />
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
