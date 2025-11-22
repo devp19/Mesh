@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Stick Viewer — Chooser (Cube optional, list all GLBs)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html,body{margin:0;height:100%;background:#0b0f14;color:#e6edf3;font-family:Inter,system-ui,Arial}
+    canvas{display:block}
+    #topbar{position:fixed;top:8px;left:8px;right:8px;display:flex;gap:8px;flex-wrap:wrap;z-index:10}
+    .card{background:#0f172a;border-radius:10px;padding:10px 12px;display:flex;gap:8px;align-items:center}
+    button{border:0;border-radius:8px;background:#1f6feb;color:#fff;cursor:pointer;padding:8px 10px}
+    select{background:#0b152a;color:#e6edf3;border:1px solid #1f2a44;border-radius:8px;padding:6px 8px;min-width:220px}
+    label{display:flex;align-items:center;gap:6px}
+    #log{position:fixed;bottom:10px;left:10px;right:10px;background:#0f172a;color:#cbd5e1;padding:8px 10px;border-radius:8px;font-size:12px;opacity:.95;white-space:pre-wrap;max-height:40vh;overflow:auto}
+    #drop{position:fixed;bottom:58px;left:10px;right:10px;padding:8px 10px;border:1px dashed #2b3b5c;border-radius:8px;color:#9fb3d1;background:#0f172a77}
+  </style>
+</head>
+<body>
+  <div id="topbar">
+    <div class="card">
+      <strong>OBJ (Translate)</strong>
+      <button id="objConnect">Connect</button>
+      <button id="objDisconnect" disabled>Disconnect</button>
+      <span id="objName">—</span>
+      <button id="objZero" disabled>Zero</button>
+      <button id="resetTranslate" disabled>Reset Translate</button>
+    </div>
+    <div class="card">
+      <strong>CAM (Orbit)</strong>
+      <button id="camConnect">Connect</button>
+      <button id="camDisconnect" disabled>Disconnect</button>
+      <span id="camName">—</span>
+      <button id="camZero" disabled>Zero</button>
+      <button id="resetView">Reset View</button>
+    </div>
+    <div class="card">
+      <strong>Models</strong>
+      <select id="modelSelect"></select>
+      <button id="refreshList">Refresh</button>
+      <button id="loadSelected">Load</button>
+      <button id="clearModel">Clear</button>
+      <label><input type="checkbox" id="cubeToggle"> Show cube</label>
+    </div>
+  </div>
+
+  <div id="drop">Drop a .glb/.gltf here (DRACO + Meshopt supported). Files appear in the dropdown as "(dropped)".</div>
+  <div id="log">Ready. Use the dropdown to choose a model. Cube is off by default — toggle it if you want a reference.</div>
+
+  <!-- Three + loaders (NO KTX2) -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.146.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.146.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.146.0/examples/js/loaders/DRACOLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/meshoptimizer@0.18.1/meshopt_decoder.js"></script>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const log = m => ($('log').textContent = String(m), console.log(m));
+
+    // === Scene (cube optional) ===
+    const renderer = new THREE.WebGLRenderer({ antialias:true });
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0b0f14);
+
+    const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.05, 2000);
+    const DEFAULT_AZ = 0.8, DEFAULT_EL = 0.32, DEFAULT_R = 2.1;
+    let camR = DEFAULT_R, camAz = DEFAULT_AZ, camEl = DEFAULT_EL;
+    let camAzT = camAz,   camElT = camEl;
+
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x334455, 1.0);
+    const dir = new THREE.DirectionalLight(0xffffff, 1.2); dir.position.set(2,3,4);
+    scene.add(hemi, dir);
+    const grid = new THREE.GridHelper(6, 60, 0x224466, 0x112233); grid.position.y = -0.75; scene.add(grid);
+
+    // Cube (off by default)
+    const cube = new THREE.Mesh(
+      new THREE.BoxGeometry(0.8,0.8,0.8),
+      new THREE.MeshStandardMaterial({color:0x83c7ff, metalness:0.15, roughness:0.35})
+    );
+    cube.visible = false;
+    scene.add(cube);
+    let modelRoot = null;
+
+    $('cubeToggle').addEventListener('change', ()=>{
+      cube.visible = $('cubeToggle').checked;
+      log(cube.visible ? 'Cube ON' : 'Cube OFF');
+    });
+
+    // Loaders + codecs
+    const loader = new THREE.GLTFLoader();
+    const draco = new THREE.DRACOLoader(); draco.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/'); loader.setDRACOLoader(draco);
+    if (typeof MeshoptDecoder !== 'undefined') loader.setMeshoptDecoder(MeshoptDecoder);
+
+    function fitAndShow(obj){
+      const box = new THREE.Box3().setFromObject(obj);
+      const size = new THREE.Vector3(); box.getSize(size);
+      const center = new THREE.Vector3(); box.getCenter(center);
+      obj.position.sub(center);
+      const maxDim = Math.max(size.x, size.y, size.z) || 1;
+      const scale = 1.2 / maxDim;
+      obj.scale.setScalar(scale);
+      scene.add(obj);
+      modelRoot = obj;
+      log(`Model loaded. Size ~ [${size.x.toFixed(2)}, ${size.y.toFixed(2)}, ${size.z.toFixed(2)}]`);
+    }
+
+    function clearModel(){
+      if (modelRoot){ scene.remove(modelRoot); modelRoot = null; }
+      log('Model cleared. Use Show cube if you want a reference.');
+    }
+
+    function loadModel(path){
+      try{
+        const url = new URL(path, window.location.href).toString();
+        log('Loading ' + url);
+        loader.load(url, (gltf)=>{
+          clearModel();
+          gltf.scene.traverse(o=>{ if (o.isMesh){ o.castShadow=true; o.receiveShadow=true; }});
+          fitAndShow(gltf.scene);
+        }, undefined, (err)=>{
+          log('Failed to load ' + path + '\\n' + (err?.message || err));
+        });
+      }catch(e){
+        log('Invalid model path: ' + path + '\\n' + (e?.message||e));
+      }
+    }
+
+    async function listModelsInFolder(){
+      try{
+        const base = window.location.pathname.replace(/[^\\/]+$/, '');
+        const res = await fetch(base || './', { cache: 'no-store' });
+        const html = await res.text();
+        const div = document.createElement('div'); div.innerHTML = html;
+        const links = Array.from(div.querySelectorAll('a'));
+        const files = links.map(a => a.getAttribute('href') || '').filter(h => /\.(glb|gltf)$/i.test(h));
+        const uniq = Array.from(new Set(files)).map(h => decodeURIComponent(h));
+        console.log('Folder models:', uniq);
+        return uniq;
+      }catch(e){
+        log('Directory listing not available — use drag & drop.');
+        return [];
+      }
+    }
+
+    async function refreshModelList(){
+      const select = $('modelSelect');
+      select.innerHTML = '';
+      const models = await listModelsInFolder();
+      if (models.length === 0){
+        const opt = document.createElement('option'); opt.value=''; opt.textContent='No .glb/.gltf found'; select.appendChild(opt);
+        log('No models found — add a .glb/.gltf or drag & drop.');
+        return;
+      }
+      // Sort by name and prefer 'drone.glb' on top if present
+      models.sort((a,b)=> a.localeCompare(b));
+      const droneIdx = models.findIndex(m => m.toLowerCase().endsWith('drone.glb'));
+      if (droneIdx > 0){ const d = models.splice(droneIdx,1)[0]; models.unshift(d); }
+      for (const m of models){
+        const o = document.createElement('option'); o.value=m; o.textContent=m; select.appendChild(o);
+      }
+      log('Models listed. Choose one and click Load.');
+    }
+
+    $('refreshList').onclick = ()=>refreshModelList();
+    $('loadSelected').onclick = ()=>{
+      const sel = $('modelSelect');
+      if (sel.value) loadModel(sel.value);
+    };
+    $('clearModel').onclick = clearModel;
+
+    // Drag & drop
+    const drop = $('drop');
+    ;['dragenter','dragover'].forEach(evt => drop.addEventListener(evt, e=>{ e.preventDefault(); drop.style.borderColor='#4da3ff'; }));
+    ;['dragleave','drop'].forEach(evt => drop.addEventListener(evt, e=>{ e.preventDefault(); drop.style.borderColor='#2b3b5c'; }));
+    drop.addEventListener('drop', e=>{
+      const f = e.dataTransfer?.files?.[0];
+      if (!f) return;
+      const url = URL.createObjectURL(f);
+      loadModel(url);
+      const sel = $('modelSelect');
+      const opt = document.createElement('option'); opt.value=url; opt.textContent=f.name + ' (dropped)';
+      sel.appendChild(opt); sel.value = url;
+    });
+
+    // === BLE UUIDs ===
+    const SERVICE_UUID = "12345678-1234-5678-1234-56789abcdef0";
+    const CHAR_UUID    = "12345678-1234-5678-1234-56789abcdef1";
+
+    const objConnect = $('objConnect'), objDisconnect = $('objDisconnect'), objZero = $('objZero'), resetTranslate = $('resetTranslate'), objName = $('objName');
+    const camConnect = $('camConnect'), camDisconnect = $('camDisconnect'), camZero = $('camZero'), camName = $('camName');
+
+    // --- OBJ stick (camera translate) ---
+    let objDev=null, objChar=null;
+    const qDevObj = new THREE.Quaternion();
+    const qZeroObj = new THREE.Quaternion();
+    const qZeroObjInv = new THREE.Quaternion();
+    let objZeroSet = false;
+    const translateT = new THREE.Vector2(0,0);
+    const translateV = new THREE.Vector2(0,0);
+
+    // --- CAM stick (orbit) ---
+    let camDev=null, camChar=null;
+    const qDevCam = new THREE.Quaternion();
+    const qZeroCam = new THREE.Quaternion();
+    const qZeroCamInv = new THREE.Quaternion();
+    let camZeroSet = false;
+    let lastRelCam = null;
+    let lastCamPacketTime = 0;
+
+    const qAxisFix = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI/2, 0, 0, 'XYZ'));
+
+    objConnect.onclick = async ()=>{
+      try{
+        objDev = await navigator.bluetooth.requestDevice({acceptAllDevices:true, optionalServices:[SERVICE_UUID]});
+        const server = await objDev.gatt.connect();
+        const svc = await server.getPrimaryService(SERVICE_UUID);
+        objChar = await svc.getCharacteristic(CHAR_UUID);
+        await objChar.startNotifications();
+        objChar.addEventListener('characteristicvaluechanged', onObjQuat);
+        objDisconnect.disabled = false; objZero.disabled = false; resetTranslate.disabled = false;
+        objName.textContent = objDev.name||'OBJ';
+        objDev.addEventListener('gattserverdisconnected', ()=>{
+          objDisconnect.disabled = objZero.disabled = resetTranslate.disabled = true;
+          objName.textContent = '—'; log('OBJ disconnected');
+        });
+        qZeroObj.copy(qDevObj).normalize(); qZeroObjInv.copy(qZeroObj).invert(); objZeroSet = true;
+        translateT.set(0,0); translateV.set(0,0);
+        log('OBJ connected (roll→X, pitch→Y → camera translate)');
+      }catch(e){ log('OBJ connect error: '+(e.message||e)); }
+    };
+    objDisconnect.onclick = ()=>{ try{ if(objDev?.gatt?.connected) objDev.gatt.disconnect(); }catch{} };
+    objZero.onclick = ()=>{ qZeroObj.copy(qDevObj).normalize(); qZeroObjInv.copy(qZeroObj).invert(); objZeroSet=true; translateT.set(0,0); log('OBJ zero set'); };
+    resetTranslate.onclick = ()=>{ translateT.set(0,0); log('Translate reset'); };
+
+    camConnect.onclick = async ()=>{
+      try{
+        camDev = await navigator.bluetooth.requestDevice({acceptAllDevices:true, optionalServices:[SERVICE_UUID]});
+        const server = await camDev.gatt.connect();
+        const svc = await server.getPrimaryService(SERVICE_UUID);
+        camChar = await svc.getCharacteristic(CHAR_UUID);
+        await camChar.startNotifications();
+        camChar.addEventListener('characteristicvaluechanged', onCamQuat);
+        camDisconnect.disabled = false; camZero.disabled = false;
+        camName.textContent = camDev.name||'CAM';
+        camDev.addEventListener('gattserverdisconnected', ()=>{
+          camDisconnect.disabled = camZero.disabled = true;
+          camName.textContent = '—'; log('CAM disconnected');
+        });
+        qZeroCam.copy(qDevCam).normalize(); qZeroCamInv.copy(qZeroCam).invert(); camZeroSet=true; lastRelCam=null;
+        log('CAM connected (orbit)');
+      }catch(e){ log('CAM connect error: '+(e.message||e)); }
+    };
+    camDisconnect.onclick = ()=>{ try{ if(camDev?.gatt?.connected) camDev.gatt.disconnect(); }catch{} };
+    camZero.onclick = ()=>{ qZeroCam.copy(qDevCam).normalize(); qZeroCamInv.copy(qZeroCam).invert(); camZeroSet=true; lastRelCam=null; log('CAM zero set'); };
+
+    const eObj = new THREE.Euler(0,0,0,'YXZ');
+    function onObjQuat(e){ const dv=e.target.value; if(!dv||dv.byteLength<16) return;
+      const qx=dv.getFloat32(0,true), qy=dv.getFloat32(4,true), qz=dv.getFloat32(8,true), qw=dv.getFloat32(12,true);
+      qDevObj.set(qx,qy,qz,qw).normalize(); let qRel=qDevObj.clone(); if(objZeroSet) qRel.premultiply(qZeroObjInv); qRel.premultiply(qAxisFix);
+      eObj.setFromQuaternion(qRel,'YXZ');
+      translateT.set(eObj.z * 1.6, eObj.x * 1.4);
+    }
+
+    const eCam = new THREE.Euler(0,0,0,'YXZ');
+    function onCamQuat(e){ const dv=e.target.value; if(!dv||dv.byteLength<16) return;
+      const now=performance.now();
+      const qx=dv.getFloat32(0,true), qy=dv.getFloat32(4,true), qz=dv.getFloat32(8,true), qw=dv.getFloat32(12,true);
+      qDevCam.set(qx,qy,qz,qw).normalize(); let qRel=qDevCam.clone(); if(camZeroSet) qRel.premultiply(qZeroCamInv); qRel.premultiply(qAxisFix);
+      if(!lastRelCam || (now-lastCamPacketTime)>220){ lastRelCam=qRel.clone(); lastCamPacketTime=now; return; }
+      const qDelta=lastRelCam.clone().invert().multiply(qRel).normalize(); eCam.setFromQuaternion(qDelta,'YXZ');
+      let dYaw=eCam.y, dPitch=eCam.x;
+      const db=0.10*Math.PI/180; if(Math.abs(dYaw)<db) dYaw=0; if(Math.abs(dPitch)<db) dPitch=0;
+      camAzT += dYaw*6.8; camElT = Math.max(-1.2, Math.min(1.2, camElT + dPitch*4.2));
+      lastRelCam.copy(qRel); lastCamPacketTime=now;
+    }
+
+    const forward = new THREE.Vector3(), right = new THREE.Vector3(), up = new THREE.Vector3();
+    let lastT = performance.now();
+    function tick(){
+      const now = performance.now(), dt = Math.max(0, now-lastT); lastT = now;
+      const a = 1 - Math.exp(-dt/14); translateV.lerp(translateT, a);
+      const ac = 1 - Math.exp(-dt/14); camAz += (camAzT - camAz)*ac; camEl += (camElT - camEl)*ac;
+      const basePos = new THREE.Vector3(
+        2.1*Math.cos(camEl)*Math.sin(camAz),
+        2.1*Math.sin(camEl),
+        2.1*Math.cos(camEl)*Math.cos(camAz)
+      );
+      camera.getWorldDirection(forward).normalize();
+      right.crossVectors(forward, camera.up).normalize();
+      up.copy(camera.up).normalize();
+      const translate = new THREE.Vector3().addScaledVector(right, translateV.x).addScaledVector(up, translateV.y);
+      const camPos = new THREE.Vector3().addVectors(basePos, translate);
+      camera.position.copy(camPos);
+      const target = new THREE.Vector3().add(translate);
+      camera.lookAt(target);
+      renderer.render(scene, camera);
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+    addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+    // Populate model list on load
+    refreshModelList();
+  </script>
+</body>
+</html>
