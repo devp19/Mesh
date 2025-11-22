@@ -29,7 +29,10 @@ export default function Home() {
       {/* Navigation Header */}
       <nav className="relative z-50 px-8 py-4 flex justify-between items-center">
         <div className="flex items-center gap-8">
-          <h1 className="text-xl font-semibold text-white">VisionView</h1>
+          <div className="flex items-center gap-2">
+            <img src="/logo.png" alt="VisionView Logo" className="w-8 h-8 object-contain" />
+            <h1 className="text-xl font-semibold text-white">VisionView</h1>
+          </div>
           <div className="flex items-center gap-6 text-sm text-white/60">
             <a href="#" className="hover:text-white transition-colors">PROTOCOL</a>
             <span>/</span>

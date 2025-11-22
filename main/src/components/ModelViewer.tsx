@@ -56,7 +56,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   const mouseRef = useRef<THREE.Vector2>(new THREE.Vector2());
   const explodedGroupsRef = useRef<Map<THREE.Group, ExplodedGroupData>>(new Map());
   const noiseGenRef = useRef<SimpleNoise>(new SimpleNoise());
-  const animationFrameRef = useRef<number>();
+  const animationFrameRef = useRef<number | null>(null);
   const isIsolatingRef = useRef(false);
   const selectedObjectRef = useRef<THREE.Object3D | null>(null);
   const viewModeRef = useRef<ViewMode>('holo');
@@ -949,6 +949,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         {/* Top Controls */}
         <div className="absolute top-0 left-0 w-full z-10 p-6 flex justify-between items-center">
           <div className="flex items-center gap-3">
+            <img src="/logo.png" alt="VisionView Logo" className="w-8 h-8 object-contain" />
             <h1 className="text-xl font-semibold text-white">VisionView</h1>
             <span className="px-2 py-1 bg-[#00ff87]/20 border border-[#00ff87]/50 rounded text-xs text-[#00ff87]">Beta</span>
           </div>
