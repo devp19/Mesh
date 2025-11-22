@@ -18,23 +18,23 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-[#E5E6DA] font-mono flex flex-col overflow-hidden">
       
       {/* Header */}
-      <nav className="border-b border-[#1D1E15] px-0 h-16 flex justify-between items-center bg-[#E5E6DA] z-50">
+      <nav className="border-b border-[#1D1E15] px-0 h-12 flex justify-between items-center bg-[#E5E6DA] z-50">
         <div className="flex items-center h-full flex-1">
           {/* Logo Box */}
-          <Link href="/" className="w-[64px] h-full flex items-center justify-center bg-[#E5E6DA] shrink-0 border-r border-[#1D1E15] hover:bg-[#1D1E15] group transition-colors">
-             <div className="w-8 h-8 flex items-center justify-center">
-               <img src="/logo.png" alt="VisionView Logo" className="w-6 h-6 object-contain invert group-hover:invert-0 transition-all" />
+          <Link href="/" className="w-[48px] h-full flex items-center justify-center bg-[#E5E6DA] shrink-0 border-r border-[#1D1E15] hover:bg-[#1D1E15] group transition-colors">
+             <div className="w-6 h-6 flex items-center justify-center">
+               <img src="/logo.png" alt="VisionView Logo" className="w-4 h-4 object-contain invert group-hover:invert-0 transition-all" />
              </div>
           </Link>
           
-          <div className="px-6 text-xs font-medium uppercase tracking-wide text-[#1D1E15]">
+          <div className="px-4 text-[10px] font-medium uppercase tracking-wide text-[#1D1E15]">
             Dashboard / Model Viewer
           </div>
         </div>
         
-        <div className="flex items-center gap-6 px-6">
-          <div className="w-2 h-2 rounded-full bg-[#DF6C42] animate-pulse"></div>
-          <div className="text-xs uppercase tracking-widest opacity-50">Connected</div>
+        <div className="flex items-center gap-4 px-4">
+          <div className="w-1.5 h-1.5 rounded-full bg-[#DF6C42] animate-pulse"></div>
+          <div className="text-[10px] uppercase tracking-widest opacity-50">Connected</div>
         </div>
       </nav>
 

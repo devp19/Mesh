@@ -39,11 +39,13 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   const [isIsolating, setIsIsolating] = useState(false);
   const [showInspector, setShowInspector] = useState(false);
   const [inspectorData, setInspectorData] = useState({ name: '', description: '', type: '' });
+  const [annotationOverlay, setAnnotationOverlay] = useState<string | null>(null);
   const [showSplitSection, setShowSplitSection] = useState(false);
   const [showExplodedControls, setShowExplodedControls] = useState(false);
   const [loading, setLoading] = useState(false);
   const [modelReady, setModelReady] = useState(false);
   const [animationFinished, setAnimationFinished] = useState(false);
+  const [isIdentifying, setIsIdentifying] = useState(false);
 
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -94,7 +96,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     camera.position.set(8, 5, 8);
     cameraRef.current = camera;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -594,6 +596,14 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       description: userData.description,
       type: userData.type
     });
+
+    // Load cached annotation if available
+    if (userData.annotation) {
+        setAnnotationOverlay(userData.annotation);
+    } else {
+        setAnnotationOverlay(null);
+    }
+
     setShowInspector(true);
   };
 
@@ -614,6 +624,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     setIsIsolating(false);
     setShowInspector(false);
     setShowSplitSection(false);
+    setAnnotationOverlay(null);
   };
 
   const handleSplitMesh = async () => {
@@ -939,25 +950,111 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     );
   };
 
+  const identifyPart = async () => {
+    if (!selectedObject || !rendererRef.current || !sceneRef.current || !cameraRef.current) return;
+
+    // Check cache first
+    const userData = (selectedObject as any).userData;
+    if (userData && userData.annotation) {
+        setAnnotationOverlay(userData.annotation);
+        return;
+    }
+
+    setIsIdentifying(true);
+
+    try {
+      // 1. Capture Image
+      // Ensure we render the current isolated view first
+      if (composerRef.current) composerRef.current.render();
+      else rendererRef.current.render(sceneRef.current, cameraRef.current);
+      
+      const screenshot = rendererRef.current.domElement.toDataURL('image/jpeg', 0.8);
+
+      // 2. Gather Mesh Data
+      const mesh = selectedObject as THREE.Mesh;
+      const geometry = mesh.geometry;
+      if (!geometry.boundingBox) geometry.computeBoundingBox();
+      const box = geometry.boundingBox!;
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+      
+      const meshAnalysis = {
+        name: (mesh as any).userData.name || 'Unknown Part',
+        position: mesh.position,
+        size: { width: size.x, height: size.y, depth: size.z },
+        vertexCount: geometry.attributes.position.count,
+        centerPoint: center
+      };
+
+      // 3. Call API
+      const res = await fetch('/api/ai-explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          meshAnalysis,
+          modelType: prompt, // Use the search prompt as model type hint
+          meshImage: screenshot,
+          searchQuery: prompt
+        })
+      });
+
+      const data = await res.json();
+
+      if (data.error) throw new Error(data.error);
+
+      // 4. Update Inspector
+      setInspectorData(prev => ({
+        ...prev,
+        name: data.name,
+        description: data.description,
+        type: data.category
+      }));
+
+      // 5. Cache data in userData
+      if (selectedObject) {
+          (selectedObject as any).userData = {
+              ...(selectedObject as any).userData,
+              name: data.name,
+              description: data.description,
+              type: data.category,
+              annotation: data.svg_overlay || null
+          };
+      }
+
+      // 6. Show overlay
+      if (data.svg_overlay) {
+          setAnnotationOverlay(data.svg_overlay);
+      }
+
+    } catch (err) {
+      console.error('Identification failed:', err);
+      alert('Failed to identify part');
+    } finally {
+      setIsIdentifying(false);
+    }
+  };
+
   return (
     <div className="absolute inset-0 bg-[#E5E6DA] z-0">
       <div className="w-full h-full relative">
         {/* Top Controls */}
-        <div className="absolute top-0 left-0 w-full z-10 p-6 flex justify-between items-center pointer-events-none">
+        <div className="absolute top-0 left-0 w-full z-10 p-4 flex justify-between items-center pointer-events-none">
            {/* Top Left is empty now as nav is in dashboard layout */}
            <div></div>
            
-          <div className="flex items-center gap-3 pointer-events-auto">
-            <div className="flex items-center gap-1.5 bg-[#1D1E15]/5 border border-[#1D1E15]/10 rounded-lg p-1">
+          <div className="flex items-center gap-2 pointer-events-auto">
+            <div className="flex items-center gap-1 bg-[#1D1E15]/5 border border-[#1D1E15]/10 rounded-lg p-1">
               <button
                 onClick={() => setViewMode('holo')}
-                className={`px-3 py-1.5 text-xs rounded font-medium transition-colors ${viewMode === 'holo' ? 'bg-[#1D1E15] text-[#E5E6DA]' : 'text-[#1D1E15]/60 hover:text-[#1D1E15]'}`}
+                className={`px-2.5 py-1 text-[10px] rounded font-medium transition-colors ${viewMode === 'holo' ? 'bg-[#1D1E15] text-[#E5E6DA]' : 'text-[#1D1E15]/60 hover:text-[#1D1E15]'}`}
               >
                 Wireframe
               </button>
               <button
                 onClick={() => setViewMode('solid')}
-                className={`px-3 py-1.5 text-xs rounded font-medium transition-colors ${viewMode === 'solid' ? 'bg-[#1D1E15] text-[#E5E6DA]' : 'text-[#1D1E15]/60 hover:text-[#1D1E15]'}`}
+                className={`px-2.5 py-1 text-[10px] rounded font-medium transition-colors ${viewMode === 'solid' ? 'bg-[#1D1E15] text-[#E5E6DA]' : 'text-[#1D1E15]/60 hover:text-[#1D1E15]'}`}
               >
                 Solid
               </button>
@@ -971,9 +1068,9 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
             />
             <label
               htmlFor="file-input"
-              className="px-4 py-2 bg-[#DF6C42] text-[#E5E6DA] rounded-lg text-xs font-bold hover:bg-[#1D1E15] transition-colors flex items-center gap-2 cursor-pointer uppercase tracking-wide"
+              className="px-3 py-1.5 bg-[#DF6C42] text-[#E5E6DA] rounded-lg text-[10px] font-bold hover:bg-[#1D1E15] transition-colors flex items-center gap-1.5 cursor-pointer uppercase tracking-wide"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="17 8 12 3 7 8" />
                 <line x1="12" y1="3" x2="12" y2="15" />
@@ -983,7 +1080,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
             {onClose && (
               <button
                 onClick={onClose}
-                className="px-4 py-2 bg-[#1D1E15] text-[#E5E6DA] rounded-lg text-xs font-bold hover:bg-[#DF6C42] transition-colors uppercase tracking-wide"
+                className="px-3 py-1.5 bg-[#1D1E15] text-[#E5E6DA] rounded-lg text-[10px] font-bold hover:bg-[#DF6C42] transition-colors uppercase tracking-wide"
               >
                 Close
               </button>
@@ -992,9 +1089,9 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         </div>
 
         {/* Bottom Prompt Bar */}
-        <div className="absolute bottom-0 left-0 w-full z-10 p-6 pointer-events-none">
-          <div className="max-w-3xl mx-auto pointer-events-auto">
-            <div className="bg-[#E5E6DA]/80 border border-[#1D1E15] backdrop-blur-md p-2 flex gap-3 items-center shadow-lg">
+        <div className="absolute bottom-0 left-0 w-full z-10 p-4 pointer-events-none">
+          <div className="max-w-2xl mx-auto pointer-events-auto">
+            <div className="bg-[#E5E6DA]/80 border border-[#1D1E15] backdrop-blur-md p-1.5 flex gap-2 items-center shadow-lg">
               <input
                 id="prompt-input"
                 type="text"
@@ -1006,11 +1103,11 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
                     generateModel(prompt);
                   }
                 }}
-                className="flex-1 bg-transparent border-none outline-none text-[#1D1E15] placeholder-[#1D1E15]/40 text-sm font-mono px-4"
+                className="flex-1 bg-transparent border-none outline-none text-[#1D1E15] placeholder-[#1D1E15]/40 text-[10px] font-mono px-3"
               />
               <button
                 onClick={() => generateModel(prompt)}
-                className="px-6 py-3 bg-[#1D1E15] text-[#E5E6DA] text-sm font-bold hover:bg-[#DF6C42] transition-colors flex-shrink-0 uppercase tracking-wide"
+                className="px-4 py-2 bg-[#1D1E15] text-[#E5E6DA] text-[10px] font-bold hover:bg-[#DF6C42] transition-colors flex-shrink-0 uppercase tracking-wide"
               >
                 Generate
               </button>
@@ -1019,13 +1116,13 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         </div>
 
         {/* Action Buttons */}
-        <div className="absolute bottom-24 right-6 z-10 flex flex-col gap-3">
+        <div className="absolute bottom-20 right-4 z-10 flex flex-col gap-2">
           {isIsolating && (
             <button
               onClick={resetView}
-              className="px-4 py-2 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] rounded-lg text-xs font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex items-center gap-2 uppercase tracking-wide shadow-sm"
+              className="px-3 py-1.5 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] rounded-lg text-[10px] font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex items-center gap-1.5 uppercase tracking-wide shadow-sm"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 12" />
               </svg>
               Reset
@@ -1033,9 +1130,9 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
           )}
           <button
             onClick={exportGLB}
-            className="px-4 py-2 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] rounded-lg text-xs font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex items-center gap-2 uppercase tracking-wide shadow-sm"
+            className="px-3 py-1.5 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] rounded-lg text-[10px] font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex items-center gap-1.5 uppercase tracking-wide shadow-sm"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" y1="15" x2="12" y2="3" />
@@ -1047,47 +1144,66 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         {/* Inspector Panel */}
         {showInspector && (
           <div
-            className={`absolute top-24 left-6 bottom-24 w-80 bg-[#E5E6DA]/90 border border-[#1D1E15] backdrop-blur-md flex flex-col overflow-hidden transition-transform duration-300 shadow-xl ${
+            className={`absolute top-20 left-4 bottom-20 w-64 bg-[#E5E6DA]/90 border border-[#1D1E15] backdrop-blur-md flex flex-col overflow-hidden transition-transform duration-300 shadow-xl z-20 ${
               showInspector ? 'translate-x-0' : '-translate-x-full'
             }`}
           >
-            <div className="flex-shrink-0 border-b border-[#1D1E15]/20 pb-4 px-6 pt-6">
-              <h2 className="text-xl font-bold text-[#1D1E15] mb-2 truncate font-sans">{inspectorData.name}</h2>
-              <span className="px-2 py-1 bg-[#DF6C42]/10 border border-[#DF6C42] rounded text-xs text-[#DF6C42] font-mono uppercase">
+            <div className="flex-shrink-0 border-b border-[#1D1E15]/20 pb-3 px-4 pt-4">
+              <h2 className="text-base font-bold text-[#1D1E15] mb-1.5 truncate font-sans">{inspectorData.name}</h2>
+              <span className="px-1.5 py-0.5 bg-[#DF6C42]/10 border border-[#DF6C42] rounded text-[10px] text-[#DF6C42] font-mono uppercase">
                 {inspectorData.type}
               </span>
             </div>
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 font-mono">
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 font-mono">
               <div>
-                <h3 className="text-xs text-[#1D1E15]/50 uppercase tracking-wider mb-2">Description</h3>
-                <p className="text-sm text-[#1D1E15] leading-relaxed break-words">{inspectorData.description}</p>
+                <h3 className="text-[10px] text-[#1D1E15]/50 uppercase tracking-wider mb-1.5">Description</h3>
+                <p className="text-[10px] text-[#1D1E15] leading-relaxed break-words">{inspectorData.description}</p>
+                <button
+                  onClick={identifyPart}
+                  disabled={isIdentifying}
+                  className="mt-3 w-full px-3 py-2 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] text-[10px] font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors uppercase tracking-wide flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isIdentifying ? (
+                    <>
+                      <div className="w-2 h-2 border-2 border-current border-t-transparent rounded-full animate-spin"/>
+                      Identifying...
+                    </>
+                  ) : (
+                    <>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                      </svg>
+                      Identify with AI
+                    </>
+                  )}
+                </button>
               </div>
               {showSplitSection && (
-                <div className="mt-2 p-4 bg-[#1D1E15]/5 border border-[#1D1E15]/10 rounded-xl">
-                  <div className="text-xs text-[#1D1E15]/70 mb-3 font-bold uppercase tracking-wider">Actions</div>
+                <div className="mt-2 p-3 bg-[#1D1E15]/5 border border-[#1D1E15]/10 rounded-xl">
+                  <div className="text-[10px] text-[#1D1E15]/70 mb-2 font-bold uppercase tracking-wider">Actions</div>
                   <button
                     onClick={handleSplitMesh}
-                    className="w-full px-4 py-3 bg-[#1D1E15] text-[#E5E6DA] text-sm font-bold flex items-center justify-center gap-2 mb-3 hover:bg-[#DF6C42] transition-colors uppercase tracking-wide"
+                    className="w-full px-3 py-2 bg-[#1D1E15] text-[#E5E6DA] text-[10px] font-bold flex items-center justify-center gap-1.5 mb-2 hover:bg-[#DF6C42] transition-colors uppercase tracking-wide"
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M21 8v13H3V8" />
                       <path d="M1 3h22v5H1z" />
                       <path d="M10 12h4" />
                     </svg>
                     Split Mesh
                   </button>
-                  <p className="text-xs text-[#1D1E15]/60 mb-3 leading-relaxed break-words">
+                  <p className="text-[10px] text-[#1D1E15]/60 mb-2 leading-relaxed break-words">
                     Separates disconnected geometry into distinct parts.
                   </p>
                   {showExplodedControls && (
-                    <div className="mt-3 pt-3 border-t border-[#1D1E15]/10">
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="text-xs text-[#1D1E15] font-bold uppercase">Exploded View</label>
+                    <div className="mt-2 pt-2 border-t border-[#1D1E15]/10">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-[10px] text-[#1D1E15] font-bold uppercase">Exploded View</label>
                         <button
                           onClick={() => {
                             setIsExploded(!isExploded);
                           }}
-                          className={`px-3 py-1.5 text-xs font-bold uppercase border transition-colors ${
+                          className={`px-2 py-1 text-[10px] font-bold uppercase border transition-colors ${
                             isExploded 
                               ? 'bg-[#DF6C42] text-[#E5E6DA] border-[#DF6C42]' 
                               : 'bg-transparent text-[#1D1E15] border-[#1D1E15] hover:bg-[#1D1E15] hover:text-[#E5E6DA]'
@@ -1096,8 +1212,8 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
                           {isExploded ? 'On' : 'Off'}
                         </button>
                       </div>
-                      <div className="mt-2">
-                        <label className="text-xs text-[#1D1E15]/60 block mb-1.5">
+                      <div className="mt-1.5">
+                        <label className="text-[10px] text-[#1D1E15]/60 block mb-1">
                           Distance: {explosionDistance.toFixed(1)}
                         </label>
                         <input
@@ -1107,21 +1223,21 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
                           step="0.1"
                           value={explosionDistance}
                           onChange={(e) => setExplosionDistance(parseFloat(e.target.value))}
-                          className="w-full h-1.5 bg-[#1D1E15]/20 rounded-lg appearance-none cursor-pointer accent-[#DF6C42]"
+                          className="w-full h-1 bg-[#1D1E15]/20 rounded-lg appearance-none cursor-pointer accent-[#DF6C42]"
                         />
                       </div>
                     </div>
                   )}
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-[#1D1E15]/5 p-3 border border-[#1D1E15]/10">
-                  <div className="text-xs text-[#1D1E15]/50 mb-1.5 uppercase">Geometry</div>
-                  <div className="text-[#1D1E15] font-bold text-sm">High Poly</div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-[#1D1E15]/5 p-2 border border-[#1D1E15]/10">
+                  <div className="text-[10px] text-[#1D1E15]/50 mb-1 uppercase">Geometry</div>
+                  <div className="text-[#1D1E15] font-bold text-[10px]">High Poly</div>
                 </div>
-                <div className="bg-[#1D1E15]/5 p-3 border border-[#1D1E15]/10">
-                  <div className="text-xs text-[#1D1E15]/50 mb-1.5 uppercase">Status</div>
-                  <div className="text-[#1D1E15] font-bold text-sm">Active</div>
+                <div className="bg-[#1D1E15]/5 p-2 border border-[#1D1E15]/10">
+                  <div className="text-[10px] text-[#1D1E15]/50 mb-1 uppercase">Status</div>
+                  <div className="text-[#1D1E15] font-bold text-[10px]">Active</div>
                 </div>
               </div>
             </div>
@@ -1138,10 +1254,18 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         {/* Canvas Container */}
         <div 
           ref={containerRef} 
-          className="w-full h-full" 
+          className="w-full h-full relative" 
           onClick={handleClick}
           onMouseMove={handleMouseMove}
         />
+
+        {/* Annotation Overlay */}
+        {annotationOverlay && (
+             <div 
+                className="absolute inset-0 z-5 pointer-events-none animate-in fade-in duration-500"
+                dangerouslySetInnerHTML={{ __html: annotationOverlay }}
+             />
+        )}
 
         {/* Loader */}
         {loading && <BlockyLoader onFinished={() => setAnimationFinished(true)} />}
