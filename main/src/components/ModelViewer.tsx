@@ -85,8 +85,8 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
 
     // Initialize Three.js scene
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0a0a);
-    scene.fog = new THREE.FogExp2(0x0a0a0a, 0.02);
+    scene.background = new THREE.Color(0xE5E6DA); // Match new background
+    scene.fog = new THREE.FogExp2(0xE5E6DA, 0.02);
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -97,9 +97,8 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.shadowMap.enabled = false;
-    // Ensure correct clear color immediately
-    renderer.setClearColor(0x0a0a0a, 1);
+    renderer.shadowMap.enabled = true; // Enable shadows for depth
+    renderer.setClearColor(0xE5E6DA, 1);
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
@@ -109,28 +108,30 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     controls.maxDistance = 100;
     controlsRef.current = controls;
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0x222222, 2);
+    // Lighting - Adjusted for light theme
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
     scene.add(ambientLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 3);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
     dirLight.position.set(10, 20, 10);
-    dirLight.castShadow = false;
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
     scene.add(dirLight);
 
-    const blueLight = new THREE.SpotLight(0x00aaff, 5);
-    blueLight.position.set(-10, 5, -5);
-    blueLight.lookAt(0, 0, 0);
-    scene.add(blueLight);
+    const accentLight = new THREE.SpotLight(0xDF6C42, 2); // Orange accent
+    accentLight.position.set(-10, 5, -5);
+    accentLight.lookAt(0, 0, 0);
+    scene.add(accentLight);
 
-    // Shadow plane - FIX: Ensure proper depth testing/writing
+    // Shadow plane
     const planeGeo = new THREE.PlaneGeometry(50, 50);
-    const planeMat = new THREE.ShadowMaterial({ opacity: 0.3 });
+    const planeMat = new THREE.ShadowMaterial({ opacity: 0.1, color: 0x1D1E15 }); // Dark shadow on light bg
     const shadowPlane = new THREE.Mesh(planeGeo, planeMat);
     shadowPlane.rotation.x = -Math.PI / 2;
     shadowPlane.position.y = -4;
     shadowPlane.receiveShadow = true;
-    shadowPlane.visible = false;
+    shadowPlane.visible = false; // Controlled by view mode
     scene.add(shadowPlane);
     shadowPlaneRef.current = shadowPlane;
 
@@ -140,8 +141,8 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       new THREE.Vector2(window.innerWidth, window.innerHeight),
       1.5, 0.4, 0.85
     );
-    bloomPass.threshold = 0.1;
-    bloomPass.strength = 0.5;
+    bloomPass.threshold = 0.95; // High threshold to avoid blooming the light background
+    bloomPass.strength = 0.4; 
     bloomPass.radius = 0.5;
     bloomPass.enabled = true;
     bloomPassRef.current = bloomPass;
@@ -444,28 +445,39 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     if (!sceneRef.current || !bloomPassRef.current || !shadowPlaneRef.current || !rendererRef.current) return;
 
     const isSolid = viewMode === 'solid';
-    if (isSolid) {
-      bloomPassRef.current.enabled = false;
-      sceneRef.current.background = new THREE.Color(0x1a1a1a);
-      (sceneRef.current.fog as THREE.FogExp2).color.setHex(0x1a1a1a);
-      rendererRef.current.setClearColor(0x1a1a1a, 1);
-      shadowPlaneRef.current.visible = true;
-    } else {
-      bloomPassRef.current.enabled = true;
-      sceneRef.current.background = new THREE.Color(0x0a0a0a);
-      (sceneRef.current.fog as THREE.FogExp2).color.setHex(0x0a0a0a);
-      rendererRef.current.setClearColor(0x0a0a0a, 1);
-      shadowPlaneRef.current.visible = false;
-    }
+    
+    // Always disable bloom to maintain exact background color #E5E6DA
+    bloomPassRef.current.enabled = false;
+    
+    sceneRef.current.background = new THREE.Color(0xE5E6DA); 
+    (sceneRef.current.fog as THREE.FogExp2).color.setHex(0xE5E6DA);
+    rendererRef.current.setClearColor(0xE5E6DA, 1);
+    
+    // Shadows only in solid mode
+    shadowPlaneRef.current.visible = isSolid;
 
     generatedObjectsRef.current.forEach(group => {
       group.traverse(child => {
         if ((child as THREE.Mesh).isMesh && (child as any).userData?.mats) {
           const mesh = child as THREE.Mesh;
           const mats = (mesh as any).userData.mats;
+          
+          // Update materials for light theme if needed
+          if (!isSolid) {
+             // For Holo mode in light theme, we want dark wireframes
+             const holoMat = mats.holo as THREE.MeshPhysicalMaterial;
+             if (holoMat) {
+                 holoMat.color.setHex(0xDF6C42); // Orange wireframe
+                 holoMat.emissive.setHex(0xDF6C42);
+                 // Reduced intensity to prevent color blowout, increased opacity for visibility
+                 holoMat.emissiveIntensity = 1.0; 
+                 holoMat.opacity = 0.8; 
+             }
+          }
+
           mesh.material = isSolid ? mats.solid : mats.holo;
-          mesh.castShadow = false;
-          mesh.receiveShadow = false;
+          mesh.castShadow = isSolid; // Shadows only in solid mode
+          mesh.receiveShadow = isSolid;
         }
       });
     });
@@ -760,17 +772,14 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   };
 
   const applyExplodedView = (group: THREE.Group, componentData: ComponentData[], center: THREE.Vector3) => {
-    // If not exploded OR distance is near zero, reset to original positions
-    if (!isExploded || explosionDistance <= 0.05) {
-      componentData.forEach(data => {
-        data.mesh.position.copy(data.originalLocalPos);
-      });
-      return;
+    // Center the model at origin
+    if (isExploded || explosionDistance <= 0.05) {
+      // If exploded view is active, we might need to be careful, but this function is mostly loop/animate
+      // For now, relying on the stored data.
     }
 
     componentData.forEach((data, idx) => {
       // Calculate direction from center
-      // Use centroid if available, else fallback to original position as vector
       let direction = data.originalLocalPos.clone();
       if (data.centroid && data.centroid.lengthSq() > 0.0001) {
           direction.copy(data.centroid);
@@ -790,8 +799,12 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         direction.normalize();
       }
 
-      const offset = direction.multiplyScalar(explosionDistance);
-      // Use clone() to avoid mutating originalLocalPos by accident if it was referenced
+      // Adjust explosion distance by model scale to ensure consistent visual displacement
+      // regardless of the model's original size or the applied normalization scale.
+      const scale = group.scale.x || 1;
+      const adjustedDistance = explosionDistance / scale;
+
+      const offset = direction.multiplyScalar(adjustedDistance);
       data.mesh.position.copy(data.originalLocalPos).add(offset);
     });
   };
@@ -827,15 +840,23 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         const center = new THREE.Vector3();
         box.getCenter(center);
 
-        // Center the model at origin
-        model.position.x = -center.x;
-        model.position.y = -center.y;
-        model.position.z = -center.z;
-
-        // Scale to fit
+        // Scale to fit (Target size ~4 units)
         const maxDim = Math.max(size.x, size.y, size.z);
-        const scale = 4 / maxDim;
+        const scale = 4 / (maxDim || 1);
         model.scale.set(scale, scale, scale);
+
+        // Center the model at origin
+        // We translate the model such that its visual center moves to (0,0,0)
+        // The position offset must be -center * scale because the position is in parent space
+        // but the geometry is offset by 'center' in local unscaled space? 
+        // No, 'center' is in World Space from setFromObject.
+        // Since model is at (0,0,0) identity, World Center ~= Local Center * Scale? 
+        // Actually setFromObject on unscaled model gives unscaled center.
+        // So we scale it, then negate.
+        model.position.copy(center).multiplyScalar(-scale);
+        
+        // Ensure matrix is updated for subsequent calculations
+        model.updateMatrixWorld(true);
 
         const meshes: THREE.Mesh[] = [];
         model.traverse((child) => {
@@ -862,6 +883,12 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
 
         sceneRef.current!.add(model);
         generatedObjectsRef.current.push(model);
+        
+        // Reset controls to ensure the model is in view
+        if (controlsRef.current) {
+            controlsRef.current.reset();
+        }
+        
         updateViewMode();
 
         // Setup multi-mesh exploded view if needed
@@ -912,6 +939,10 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       const meshBox = new THREE.Box3().setFromObject(mesh);
       const meshCenter = new THREE.Vector3();
       meshBox.getCenter(meshCenter);
+      
+      // Convert world center to local center relative to group
+      // This ensures that when we use it for direction, it respects the group's transform
+      group.worldToLocal(meshCenter);
 
       componentData.push({
         mesh,
@@ -944,26 +975,24 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black z-50">
+    <div className="absolute inset-0 bg-[#E5E6DA] z-0">
       <div className="w-full h-full relative">
         {/* Top Controls */}
-        <div className="absolute top-0 left-0 w-full z-10 p-6 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="VisionView Logo" className="w-8 h-8 object-contain" />
-            <h1 className="text-xl font-semibold text-white">VisionView</h1>
-            <span className="px-2 py-1 bg-[#00ff87]/20 border border-[#00ff87]/50 rounded text-xs text-[#00ff87]">Beta</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 bg-white/5 rounded-lg p-1">
+        <div className="absolute top-0 left-0 w-full z-10 p-6 flex justify-between items-center pointer-events-none">
+           {/* Top Left is empty now as nav is in dashboard layout */}
+           <div></div>
+           
+          <div className="flex items-center gap-3 pointer-events-auto">
+            <div className="flex items-center gap-1.5 bg-[#1D1E15]/5 border border-[#1D1E15]/10 rounded-lg p-1">
               <button
                 onClick={() => setViewMode('holo')}
-                className={`px-3 py-1.5 text-xs rounded ${viewMode === 'holo' ? 'bg-white/10 text-white' : 'text-white/60 hover:text-white'}`}
+                className={`px-3 py-1.5 text-xs rounded font-medium transition-colors ${viewMode === 'holo' ? 'bg-[#1D1E15] text-[#E5E6DA]' : 'text-[#1D1E15]/60 hover:text-[#1D1E15]'}`}
               >
                 Wireframe
               </button>
               <button
                 onClick={() => setViewMode('solid')}
-                className={`px-3 py-1.5 text-xs rounded ${viewMode === 'solid' ? 'bg-white/10 text-white' : 'text-white/60 hover:text-white'}`}
+                className={`px-3 py-1.5 text-xs rounded font-medium transition-colors ${viewMode === 'solid' ? 'bg-[#1D1E15] text-[#E5E6DA]' : 'text-[#1D1E15]/60 hover:text-[#1D1E15]'}`}
               >
                 Solid
               </button>
@@ -977,7 +1006,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
             />
             <label
               htmlFor="file-input"
-              className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-xs hover:bg-white/10 transition-colors flex items-center gap-2 cursor-pointer"
+              className="px-4 py-2 bg-[#DF6C42] text-[#E5E6DA] rounded-lg text-xs font-bold hover:bg-[#1D1E15] transition-colors flex items-center gap-2 cursor-pointer uppercase tracking-wide"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -989,26 +1018,18 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
             {onClose && (
               <button
                 onClick={onClose}
-                className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-xs hover:bg-white/10 transition-colors"
+                className="px-4 py-2 bg-[#1D1E15] text-[#E5E6DA] rounded-lg text-xs font-bold hover:bg-[#DF6C42] transition-colors uppercase tracking-wide"
               >
                 Close
               </button>
-            )}
-            {!onClose && (
-              <Link
-                href="/"
-                className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-xs hover:bg-white/10 transition-colors"
-              >
-                Home
-              </Link>
             )}
           </div>
         </div>
 
         {/* Bottom Prompt Bar */}
-        <div className="absolute bottom-0 left-0 w-full z-10 p-6">
-          <div className="max-w-3xl mx-auto">
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex gap-3 items-center backdrop-blur-sm">
+        <div className="absolute bottom-0 left-0 w-full z-10 p-6 pointer-events-none">
+          <div className="max-w-3xl mx-auto pointer-events-auto">
+            <div className="bg-[#E5E6DA]/80 border border-[#1D1E15] backdrop-blur-md p-2 flex gap-3 items-center shadow-lg">
               <input
                 id="prompt-input"
                 type="text"
@@ -1020,11 +1041,11 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
                     generateModel(prompt);
                   }
                 }}
-                className="flex-1 bg-transparent border-none outline-none text-white placeholder-white/40 text-sm"
+                className="flex-1 bg-transparent border-none outline-none text-[#1D1E15] placeholder-[#1D1E15]/40 text-sm font-mono px-4"
               />
               <button
                 onClick={() => generateModel(prompt)}
-                className="px-6 py-3 bg-[#00ff87] text-black rounded-xl text-sm font-medium hover:bg-[#00e677] transition-colors flex-shrink-0"
+                className="px-6 py-3 bg-[#1D1E15] text-[#E5E6DA] text-sm font-bold hover:bg-[#DF6C42] transition-colors flex-shrink-0 uppercase tracking-wide"
               >
                 Generate
               </button>
@@ -1037,7 +1058,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
           {isIsolating && (
             <button
               onClick={resetView}
-              className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-xs hover:bg-white/10 transition-colors flex items-center gap-2"
+              className="px-4 py-2 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] rounded-lg text-xs font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex items-center gap-2 uppercase tracking-wide shadow-sm"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 12" />
@@ -1047,7 +1068,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
           )}
           <button
             onClick={exportGLB}
-            className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-xs hover:bg-white/10 transition-colors flex items-center gap-2"
+            className="px-4 py-2 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] rounded-lg text-xs font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex items-center gap-2 uppercase tracking-wide shadow-sm"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -1061,27 +1082,27 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         {/* Inspector Panel */}
         {showInspector && (
           <div
-            className={`absolute top-24 left-6 bottom-24 w-80 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-sm flex flex-col overflow-hidden transition-transform duration-300 ${
+            className={`absolute top-24 left-6 bottom-24 w-80 bg-[#E5E6DA]/90 border border-[#1D1E15] backdrop-blur-md flex flex-col overflow-hidden transition-transform duration-300 shadow-xl ${
               showInspector ? 'translate-x-0' : '-translate-x-full'
             }`}
           >
-            <div className="flex-shrink-0 border-b border-white/10 pb-4 px-6 pt-6">
-              <h2 className="text-xl font-semibold text-white mb-2 truncate">{inspectorData.name}</h2>
-              <span className="px-2 py-1 bg-[#00ff87]/20 border border-[#00ff87]/50 rounded text-xs text-[#00ff87]">
+            <div className="flex-shrink-0 border-b border-[#1D1E15]/20 pb-4 px-6 pt-6">
+              <h2 className="text-xl font-bold text-[#1D1E15] mb-2 truncate font-sans">{inspectorData.name}</h2>
+              <span className="px-2 py-1 bg-[#DF6C42]/10 border border-[#DF6C42] rounded text-xs text-[#DF6C42] font-mono uppercase">
                 {inspectorData.type}
               </span>
             </div>
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 font-mono">
               <div>
-                <h3 className="text-xs text-white/50 uppercase tracking-wider mb-2">Description</h3>
-                <p className="text-sm text-white/80 leading-relaxed break-words">{inspectorData.description}</p>
+                <h3 className="text-xs text-[#1D1E15]/50 uppercase tracking-wider mb-2">Description</h3>
+                <p className="text-sm text-[#1D1E15] leading-relaxed break-words">{inspectorData.description}</p>
               </div>
               {showSplitSection && (
-                <div className="mt-2 p-4 bg-[#00ff87]/10 border border-[#00ff87]/30 rounded-xl">
-                  <div className="text-xs text-white/70 mb-3 font-medium uppercase tracking-wider">Actions</div>
+                <div className="mt-2 p-4 bg-[#1D1E15]/5 border border-[#1D1E15]/10 rounded-xl">
+                  <div className="text-xs text-[#1D1E15]/70 mb-3 font-bold uppercase tracking-wider">Actions</div>
                   <button
                     onClick={handleSplitMesh}
-                    className="w-full px-4 py-3 bg-[#00ff87] text-black rounded-xl text-sm font-medium flex items-center justify-center gap-2 mb-3 hover:bg-[#00e677] transition-colors"
+                    className="w-full px-4 py-3 bg-[#1D1E15] text-[#E5E6DA] text-sm font-bold flex items-center justify-center gap-2 mb-3 hover:bg-[#DF6C42] transition-colors uppercase tracking-wide"
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M21 8v13H3V8" />
@@ -1090,26 +1111,28 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
                     </svg>
                     Split Mesh
                   </button>
-                  <p className="text-xs text-white/60 mb-3 leading-relaxed break-words">
+                  <p className="text-xs text-[#1D1E15]/60 mb-3 leading-relaxed break-words">
                     Separates disconnected geometry into distinct parts.
                   </p>
                   {showExplodedControls && (
-                    <div className="mt-3 pt-3 border-t border-white/10">
+                    <div className="mt-3 pt-3 border-t border-[#1D1E15]/10">
                       <div className="flex items-center justify-between mb-2">
-                        <label className="text-xs text-white/70 font-medium">Exploded View</label>
+                        <label className="text-xs text-[#1D1E15] font-bold uppercase">Exploded View</label>
                         <button
                           onClick={() => {
                             setIsExploded(!isExploded);
                           }}
-                          className={`px-3 py-1.5 text-xs rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 ${
-                            isExploded ? 'bg-[#00ff87]/20 border-[#00ff87]/50' : ''
+                          className={`px-3 py-1.5 text-xs font-bold uppercase border transition-colors ${
+                            isExploded 
+                              ? 'bg-[#DF6C42] text-[#E5E6DA] border-[#DF6C42]' 
+                              : 'bg-transparent text-[#1D1E15] border-[#1D1E15] hover:bg-[#1D1E15] hover:text-[#E5E6DA]'
                           }`}
                         >
                           {isExploded ? 'On' : 'Off'}
                         </button>
                       </div>
                       <div className="mt-2">
-                        <label className="text-xs text-white/60 block mb-1.5">
+                        <label className="text-xs text-[#1D1E15]/60 block mb-1.5">
                           Distance: {explosionDistance.toFixed(1)}
                         </label>
                         <input
@@ -1119,7 +1142,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
                           step="0.1"
                           value={explosionDistance}
                           onChange={(e) => setExplosionDistance(parseFloat(e.target.value))}
-                          className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                          className="w-full h-1.5 bg-[#1D1E15]/20 rounded-lg appearance-none cursor-pointer accent-[#DF6C42]"
                         />
                       </div>
                     </div>
@@ -1127,13 +1150,13 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-white/5 p-3 rounded-xl border border-white/10">
-                  <div className="text-xs text-white/50 mb-1.5">Geometry</div>
-                  <div className="text-white font-semibold text-sm">High Poly</div>
+                <div className="bg-[#1D1E15]/5 p-3 border border-[#1D1E15]/10">
+                  <div className="text-xs text-[#1D1E15]/50 mb-1.5 uppercase">Geometry</div>
+                  <div className="text-[#1D1E15] font-bold text-sm">High Poly</div>
                 </div>
-                <div className="bg-white/5 p-3 rounded-xl border border-white/10">
-                  <div className="text-xs text-white/50 mb-1.5">Status</div>
-                  <div className="text-white font-semibold text-sm">Active</div>
+                <div className="bg-[#1D1E15]/5 p-3 border border-[#1D1E15]/10">
+                  <div className="text-xs text-[#1D1E15]/50 mb-1.5 uppercase">Status</div>
+                  <div className="text-[#1D1E15] font-bold text-sm">Active</div>
                 </div>
               </div>
             </div>
@@ -1143,7 +1166,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         {/* Tooltip */}
         <div 
           ref={tooltipRef}
-          className="fixed z-50 px-3 py-2 bg-black/60 backdrop-blur-md border border-white/10 rounded-lg text-sm text-white pointer-events-none opacity-0 transition-opacity duration-150"
+          className="fixed z-50 px-3 py-2 bg-[#1D1E15] text-[#E5E6DA] border border-[#1D1E15] text-xs font-mono uppercase tracking-wide pointer-events-none opacity-0 transition-opacity duration-150 shadow-lg"
           style={{ top: 0, left: 0 }}
         />
 
@@ -1157,9 +1180,9 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
 
         {/* Loader */}
         {loading && (
-          <div className="fixed inset-0 bg-black/95 backdrop-blur-sm z-50 flex flex-col justify-center items-center text-white">
-            <div className="text-lg font-medium mb-2">Processing geometry...</div>
-            <div className="text-sm text-white/50">Analyzing connectivity & splitting meshes</div>
+          <div className="fixed inset-0 bg-[#E5E6DA]/90 backdrop-blur-sm z-50 flex flex-col justify-center items-center text-[#1D1E15]">
+            <div className="text-lg font-bold mb-2 uppercase tracking-widest">Processing geometry...</div>
+            <div className="text-xs font-mono text-[#1D1E15]/60">Analyzing connectivity & splitting meshes</div>
           </div>
         )}
       </div>
