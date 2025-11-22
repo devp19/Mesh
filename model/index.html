@@ -269,62 +269,60 @@
         <div class="loader-subtext">Analyzing connectivity & splitting meshes</div>
     </div>
 
-    <!-- Main UI Overlay -->
-    <div class="absolute top-0 left-0 w-full h-full pointer-events-none flex flex-col justify-between z-10 p-6">
-        
-        <!-- Header / Search -->
-        <div class="pointer-events-auto w-full max-w-lg mx-auto glass-panel rounded-2xl p-6 flex flex-col gap-4 animate-fade-in">
-            <div class="flex justify-between items-center mb-2">
-                <h1 class="text-2xl font-semibold text-gradient">VisionView</h1>
+    <!-- Top Header -->
+    <div class="absolute top-0 left-0 w-full pointer-events-none z-10 p-6">
+        <div class="pointer-events-auto flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <h1 class="text-xl font-semibold text-gradient">VisionView</h1>
                 <span class="badge">Beta</span>
             </div>
-            
-            <!-- Prompt Input -->
-            <div class="flex gap-3">
-                <input id="prompt-input" type="text" placeholder="Generate procedural model (e.g., 'Brain')" 
-                    class="flex-1 input-modern rounded-xl px-4 py-3 text-sm focus:outline-none"
-                    value="Brain">
-                <button id="generate-btn" class="btn-primary px-6 py-3 rounded-xl text-sm font-medium">
+            <div class="flex items-center gap-3">
+                <!-- View Mode Toggle -->
+                <div class="flex items-center gap-1.5 bg-black/40 rounded-lg p-1">
+                    <button id="mode-holo" class="btn-ghost px-3 py-1.5 text-xs rounded active">Wireframe</button>
+                    <button id="mode-solid" class="btn-ghost px-3 py-1.5 text-xs rounded">Solid</button>
+                </div>
+                <!-- Upload Button -->
+                <input type="file" id="file-input" accept=".glb,.gltf" class="hidden">
+                <button id="upload-btn" class="btn-secondary px-4 py-2 rounded-lg text-xs flex items-center gap-2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    Upload
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Prompt Bar (ChatGPT style) -->
+    <div class="absolute bottom-0 left-0 w-full pointer-events-none z-10 p-6">
+        <div class="pointer-events-auto w-full max-w-3xl mx-auto">
+            <div class="glass-panel rounded-2xl p-4 flex gap-3 items-end">
+                <div class="flex-1 flex flex-col gap-2">
+                    <input id="prompt-input" type="text" placeholder="Generate procedural model (e.g., 'Brain')" 
+                        class="w-full input-modern rounded-xl px-4 py-3 text-sm focus:outline-none"
+                        value="Brain">
+                </div>
+                <button id="generate-btn" class="btn-primary px-6 py-3 rounded-xl text-sm font-medium flex-shrink-0">
                     Generate
                 </button>
             </div>
-
-            <!-- Divider -->
-            <div class="divider my-2"></div>
-
-            <!-- Upload Button -->
-            <input type="file" id="file-input" accept=".glb,.gltf" class="hidden">
-            <button id="upload-btn" class="btn-secondary px-4 py-3 rounded-xl text-sm w-full flex justify-center items-center gap-2">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                Upload .GLB / .GLTF
-            </button>
-
-            <!-- View Mode Toggle -->
-            <div class="flex items-center justify-between bg-black/20 rounded-xl p-1.5 mt-1">
-                <span class="text-xs text-subtle ml-2 font-medium">View Mode</span>
-                <div class="flex gap-1.5">
-                    <button id="mode-holo" class="btn-ghost px-3 py-1.5 text-xs rounded-lg active">Wireframe</button>
-                    <button id="mode-solid" class="btn-ghost px-3 py-1.5 text-xs rounded-lg">Solid</button>
-                </div>
-            </div>
         </div>
+    </div>
 
-        <!-- Action Buttons (Bottom Right) -->
-        <div class="pointer-events-auto absolute bottom-6 right-6 flex flex-col gap-3 items-end">
+        <!-- Action Buttons (Bottom Right, above prompt bar) -->
+        <div class="pointer-events-auto absolute bottom-24 right-6 flex flex-col gap-3 items-end">
              <div class="glass-panel p-3 rounded-xl mb-2 text-xs text-subtle max-w-[220px] text-right hidden" id="hint-box">
                 <div class="font-medium text-white mb-1">Tip</div>
                 Click component to isolate • Scroll to zoom
             </div>
-            <button id="reset-view-btn" class="hidden btn-secondary px-4 py-3 rounded-xl flex items-center gap-2 text-sm">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 12"/></svg>
-                Reset View
+            <button id="reset-view-btn" class="hidden btn-secondary px-4 py-2 rounded-lg flex items-center gap-2 text-xs">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 12"/></svg>
+                Reset
             </button>
-            <button id="export-btn" class="btn-secondary px-4 py-3 rounded-xl flex items-center gap-2 text-sm">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Export Model
+            <button id="export-btn" class="btn-secondary px-4 py-2 rounded-lg flex items-center gap-2 text-xs">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export
             </button>
         </div>
-    </div>
 
     <!-- Component Inspector Panel (Left Slide-out) -->
     <div id="inspector-panel" class="absolute top-6 left-6 bottom-6 w-80 glass-panel rounded-2xl transform -translate-x-[120%] transition-transform duration-300 ease-out flex flex-col z-20 pointer-events-auto overflow-hidden">
@@ -471,8 +469,7 @@
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            renderer.shadowMap.enabled = true; 
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.shadowMap.enabled = false;
             container.appendChild(renderer.domElement);
 
             // Controls
@@ -553,9 +550,7 @@
 
             const dirLight = new THREE.DirectionalLight(0xffffff, 3);
             dirLight.position.set(10, 20, 10);
-            dirLight.castShadow = true;
-            dirLight.shadow.mapSize.width = 2048;
-            dirLight.shadow.mapSize.height = 2048;
+            dirLight.castShadow = false;
             scene.add(dirLight);
 
             const blueLight = new THREE.SpotLight(0x00aaff, 5);
@@ -567,6 +562,27 @@
         // --- Custom Mesh Split Logic ---
         async function handleSplitMesh() {
             if (!selectedObject || !selectedObject.geometry) return;
+
+            // Check if this mesh is part of a multi-mesh model (already has exploded view setup)
+            let parentGroup = selectedObject.parent;
+            let multiMeshData = null;
+            while (parentGroup) {
+                if (explodedGroups.has(parentGroup)) {
+                    multiMeshData = explodedGroups.get(parentGroup);
+                    break;
+                }
+                parentGroup = parentGroup.parent;
+            }
+            
+            // If it's part of a multi-mesh model, enable exploded view instead of splitting
+            if (multiMeshData) {
+                isExploded = true;
+                toggleExplodedBtn.textContent = 'On';
+                toggleExplodedBtn.classList.add('active');
+                applyExplodedView(parentGroup, multiMeshData.components, multiMeshData.originalCenter);
+                explodedControls.classList.remove('hidden');
+                return;
+            }
 
             // Show Loader
             loaderUi.style.display = 'flex';
@@ -695,8 +711,8 @@
                         type: "Sub-assembly",
                         mats: mats
                     };
-                    newMesh.castShadow = true;
-                    newMesh.receiveShadow = true;
+                    newMesh.castShadow = false;
+                    newMesh.receiveShadow = false;
                     
                     // Calculate component centroid from geometry vertices
                     // Geometry is in the original mesh's local space
@@ -809,7 +825,52 @@
                 applyExplodedView(group, data.components, data.originalCenter);
             });
         }
-
+        // Setup exploded view for models with multiple meshes (like .glb files)
+        function setupMultiMeshExplodedView(group, meshes) {
+            // Calculate overall center
+            const overallBox = new THREE.Box3().setFromObject(group);
+            const overallCenter = new THREE.Vector3();
+            overallBox.getCenter(overallCenter);
+            
+            // Store original positions and calculate centroids
+            const componentData = [];
+            group.updateMatrixWorld();
+            
+            meshes.forEach((mesh, idx) => {
+                // Get mesh's current local position (relative to its parent in the hierarchy)
+                let localPos = new THREE.Vector3();
+                
+                // If mesh is directly in the group, use its position directly
+                if (mesh.parent === group) {
+                    localPos.copy(mesh.position);
+                } else {
+                    // Calculate world position and convert to group local
+                    const worldPos = new THREE.Vector3();
+                    mesh.getWorldPosition(worldPos);
+                    const groupInverse = new THREE.Matrix4().copy(group.matrixWorld).invert();
+                    localPos = worldPos.clone().applyMatrix4(groupInverse);
+                }
+                
+                // Calculate mesh centroid for explosion direction
+                const meshBox = new THREE.Box3().setFromObject(mesh);
+                const meshCenter = new THREE.Vector3();
+                meshBox.getCenter(meshCenter);
+                
+                // Store original local position (where mesh currently is)
+                componentData.push({
+                    mesh: mesh,
+                    originalLocalPos: localPos.clone(),
+                    centroid: meshCenter.clone()
+                });
+            });
+            
+            // Store exploded view data (but don't enable it automatically)
+            explodedGroups.set(group, {
+                originalCenter: overallCenter,
+                components: componentData
+            });
+        }
+        
         // --- File Upload Logic ---
         function handleFileUpload(event) {
             const file = event.target.files[0];
@@ -844,9 +905,11 @@
                 model.scale.set(scale, scale, scale);
 
                 let partCount = 0;
+                const meshes = [];
                 model.traverse((child) => {
                     if (child.isMesh) {
                         partCount++;
+                        meshes.push(child);
                         const originalMat = child.material;
                         const baseColor = originalMat.color ? originalMat.color : new THREE.Color(0x00aaff);
                         
@@ -858,14 +921,19 @@
                         child.userData.description = "Imported Mesh Geometry";
                         child.userData.type = "Imported";
                         
-                        child.castShadow = true;
-                        child.receiveShadow = true;
+                        child.castShadow = false;
+                        child.receiveShadow = false;
                     }
                 });
 
                 scene.add(model);
                 generatedObjects.push(model);
                 setViewMode(viewMode);
+                
+                // If model has multiple meshes, prepare exploded view (but don't enable it)
+                if (meshes.length > 1) {
+                    setupMultiMeshExplodedView(model, meshes);
+                }
                 
                 uploadBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Upload .GLB / .GLTF`;
                 URL.revokeObjectURL(url);
@@ -903,8 +971,8 @@
                 group.traverse(child => {
                     if(child.isMesh && child.userData.mats) {
                         child.material = isSolid ? child.userData.mats.solid : child.userData.mats.holo;
-                        child.castShadow = isSolid;
-                        child.receiveShadow = isSolid;
+                        child.castShadow = false;
+                        child.receiveShadow = false;
                     }
                 });
             });
@@ -1151,7 +1219,9 @@
             selectedObject = object;
             isIsolating = true;
             
-            // Show split option if it's a mesh and not already a group
+            // Show split option for any mesh
+            // For multi-mesh models, split will trigger exploded view
+            // For single meshes, split will actually split the mesh
             if (object.type === 'Mesh') {
                  splitSection.classList.remove('hidden');
             } else {
