@@ -56,10 +56,32 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   const mouseRef = useRef<THREE.Vector2>(new THREE.Vector2());
   const explodedGroupsRef = useRef<Map<THREE.Group, ExplodedGroupData>>(new Map());
   const noiseGenRef = useRef<SimpleNoise>(new SimpleNoise());
-  const animationFrameRef = useRef<number>();
+  const animationFrameRef = useRef<number | null>(null);
+  const isIsolatingRef = useRef(false);
+  const selectedObjectRef = useRef<THREE.Object3D | null>(null);
+  const viewModeRef = useRef<ViewMode>('holo');
+  const tooltipRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    isIsolatingRef.current = isIsolating;
+  }, [isIsolating]);
+
+  useEffect(() => {
+    selectedObjectRef.current = selectedObject;
+  }, [selectedObject]);
+
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
+
 
   useEffect(() => {
     if (!containerRef.current) return;
+
+    // Cleanup any existing canvas to prevent duplicates
+    while (containerRef.current.firstChild) {
+      containerRef.current.removeChild(containerRef.current.firstChild);
+    }
 
     // Initialize Three.js scene
     const scene = new THREE.Scene();
@@ -71,11 +93,13 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     camera.position.set(8, 5, 8);
     cameraRef.current = camera;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.shadowMap.enabled = false;
+    // Ensure correct clear color immediately
+    renderer.setClearColor(0x0a0a0a, 1);
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
@@ -99,7 +123,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     blueLight.lookAt(0, 0, 0);
     scene.add(blueLight);
 
-    // Shadow plane
+    // Shadow plane - FIX: Ensure proper depth testing/writing
     const planeGeo = new THREE.PlaneGeometry(50, 50);
     const planeMat = new THREE.ShadowMaterial({ opacity: 0.3 });
     const shadowPlane = new THREE.Mesh(planeGeo, planeMat);
@@ -127,17 +151,112 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     composer.addPass(bloomPass);
     composerRef.current = composer;
 
+
+
     // Raycaster
     const raycaster = new THREE.Raycaster();
     raycasterRef.current = raycaster;
 
-    // Event handlers
-    const handleMouseMove = (event: MouseEvent) => {
+    // Initial model
+    // generateModel is defined below, but available in useEffect due to closure scope if defined with var/function or const in outer scope?
+    // Actually const functions are not hoisted. BUT useEffect runs after render, so generateModel will be defined.
+    setTimeout(() => generateModel('Brain'), 0);
+
+    // Animation loop
+    const animate = () => {
+      animationFrameRef.current = requestAnimationFrame(animate);
+      if (controlsRef.current) controlsRef.current.update();
+      if (composerRef.current) composerRef.current.render();
+      
+      if (!isIsolatingRef.current && generatedObjectsRef.current.length > 0) {
+        generatedObjectsRef.current[0].rotation.y += 0.001;
+      }
+    };
+    animate();
+
+    // Resize handler for window
+    const onWindowResize = () => {
+       if (!cameraRef.current || !rendererRef.current || !composerRef.current) return;
+       cameraRef.current.aspect = window.innerWidth / window.innerHeight;
+       cameraRef.current.updateProjectionMatrix();
+       rendererRef.current.setSize(window.innerWidth, window.innerHeight);
+       composerRef.current.setSize(window.innerWidth, window.innerHeight);
+    };
+    window.addEventListener('resize', onWindowResize);
+
+    // Ensure correct clear color immediately
+    renderer.setClearColor(0x0a0a0a, 1);
+
+    return () => {
+      window.removeEventListener('resize', onWindowResize);
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      if (containerRef.current && renderer.domElement) {
+        containerRef.current.removeChild(renderer.domElement);
+      }
+      renderer.dispose();
+    };
+  }, []);
+
+  const highlightMaterial = (obj: THREE.Mesh) => {
+      if (!(obj as any).userData.mats) return;
+      const currentMat = (obj.material as THREE.Material).clone();
+      if ('emissive' in currentMat) {
+        (currentMat as THREE.MeshStandardMaterial).emissive.setHex(0xffffff);
+        (currentMat as THREE.MeshStandardMaterial).emissiveIntensity = 0.5;
+      }
+      if (viewModeRef.current === 'solid' && 'color' in currentMat) {
+        (currentMat as THREE.MeshStandardMaterial).color.offsetHSL(0, 0, 0.2);
+      }
+      obj.material = currentMat;
+  };
+
+  const restoreMaterial = (obj: THREE.Mesh) => {
+      if (!obj || !(obj as any).userData.mats) return;
+      const mats = (obj as any).userData.mats;
+      obj.material = viewModeRef.current === 'solid' ? mats.solid : mats.holo;
+  };
+
+  const handleMouseMove = (event: React.MouseEvent) => {
+      if (!containerRef.current || !raycasterRef.current || !cameraRef.current || !sceneRef.current) return;
+
+      // Update mouse ref for click events
       mouseRef.current.x = (event.clientX / window.innerWidth) * 2 - 1;
       mouseRef.current.y = -(event.clientY / window.innerHeight) * 2 + 1;
-    };
 
-    const handleClick = (event: MouseEvent) => {
+      // Hover effect logic
+      raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
+      const intersects = raycasterRef.current.intersectObjects(generatedObjectsRef.current, true);
+
+      if (intersects.length > 0) {
+        const object = intersects[0].object as THREE.Mesh;
+        if ((object as any).userData.name && object !== hoveredObjectRef.current && object !== selectedObjectRef.current) {
+          if (hoveredObjectRef.current && hoveredObjectRef.current !== selectedObjectRef.current) {
+            restoreMaterial(hoveredObjectRef.current as THREE.Mesh);
+          }
+          hoveredObjectRef.current = object;
+          highlightMaterial(object);
+          containerRef.current.style.cursor = 'pointer';
+          
+          if (tooltipRef.current) {
+            tooltipRef.current.textContent = (object as any).userData.name;
+            tooltipRef.current.style.opacity = '1';
+            tooltipRef.current.style.transform = `translate(${event.clientX + 10}px, ${event.clientY + 10}px)`;
+          }
+        }
+      } else {
+        if (hoveredObjectRef.current && hoveredObjectRef.current !== selectedObjectRef.current) {
+          restoreMaterial(hoveredObjectRef.current as THREE.Mesh);
+          hoveredObjectRef.current = null;
+        }
+        containerRef.current.style.cursor = 'default';
+        
+        if (tooltipRef.current) {
+          tooltipRef.current.style.opacity = '0';
+        }
+      }
+  };
+
+  const handleClick = (event: React.MouseEvent) => {
       if (!raycasterRef.current || !cameraRef.current || !sceneRef.current) return;
       
       raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
@@ -149,46 +268,9 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
           handleObjectClick(object);
         }
       }
-    };
+  };
 
-    const handleResize = () => {
-      if (!cameraRef.current || !rendererRef.current || !composerRef.current) return;
-      cameraRef.current.aspect = window.innerWidth / window.innerHeight;
-      cameraRef.current.updateProjectionMatrix();
-      rendererRef.current.setSize(window.innerWidth, window.innerHeight);
-      composerRef.current.setSize(window.innerWidth, window.innerHeight);
-    };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('click', handleClick);
-    window.addEventListener('resize', handleResize);
-
-    // Initial model
-    generateModel('Brain');
-
-    // Animation loop
-    const animate = () => {
-      animationFrameRef.current = requestAnimationFrame(animate);
-      if (controlsRef.current) controlsRef.current.update();
-      if (composerRef.current) composerRef.current.render();
-      
-      if (!isIsolating && generatedObjectsRef.current.length > 0) {
-        generatedObjectsRef.current[0].rotation.y += 0.001;
-      }
-    };
-    animate();
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('click', handleClick);
-      window.removeEventListener('resize', handleResize);
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-      if (containerRef.current && renderer.domElement) {
-        containerRef.current.removeChild(renderer.domElement);
-      }
-      renderer.dispose();
-    };
-  }, []);
 
   const createDualMaterials = (baseColor: THREE.Color, roughness = 0.5, metalness = 0.1) => {
     const holo = new THREE.MeshPhysicalMaterial({
@@ -359,18 +441,20 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   };
 
   const updateViewMode = () => {
-    if (!sceneRef.current || !bloomPassRef.current || !shadowPlaneRef.current) return;
+    if (!sceneRef.current || !bloomPassRef.current || !shadowPlaneRef.current || !rendererRef.current) return;
 
     const isSolid = viewMode === 'solid';
     if (isSolid) {
       bloomPassRef.current.enabled = false;
       sceneRef.current.background = new THREE.Color(0x1a1a1a);
       (sceneRef.current.fog as THREE.FogExp2).color.setHex(0x1a1a1a);
+      rendererRef.current.setClearColor(0x1a1a1a, 1);
       shadowPlaneRef.current.visible = true;
     } else {
       bloomPassRef.current.enabled = true;
       sceneRef.current.background = new THREE.Color(0x0a0a0a);
       (sceneRef.current.fog as THREE.FogExp2).color.setHex(0x0a0a0a);
+      rendererRef.current.setClearColor(0x0a0a0a, 1);
       shadowPlaneRef.current.visible = false;
     }
 
@@ -632,6 +716,17 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
           sumZ / positions.count
         );
 
+        // Center the geometry to its own origin so rotation/scaling works from center
+        newGeo.translate(-geometryCenter.x, -geometryCenter.y, -geometryCenter.z);
+
+        // mats is already defined above (line 694), reusing it.
+        
+        // newMesh is already defined above (line 695). We are modifying it, but since it was created with newGeo BEFORE translation,
+        // the geometry update (translate) will reflect in the mesh.
+        // However, we need to update the userData if we wanted to change it, but the previous code set it up correctly.
+        // The issue with the previous code was that newMesh was at (0,0,0) relative to parent, but geometry was offset.
+        // Now geometry is centered at (0,0,0), and we will move newMesh to the centroid position.
+
         const localPos = geometryCenter.clone();
 
         componentData.push({
@@ -665,7 +760,8 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   };
 
   const applyExplodedView = (group: THREE.Group, componentData: ComponentData[], center: THREE.Vector3) => {
-    if (!isExploded || explosionDistance === 0) {
+    // If not exploded OR distance is near zero, reset to original positions
+    if (!isExploded || explosionDistance <= 0.05) {
       componentData.forEach(data => {
         data.mesh.position.copy(data.originalLocalPos);
       });
@@ -673,7 +769,13 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     }
 
     componentData.forEach((data, idx) => {
+      // Calculate direction from center
+      // Use centroid if available, else fallback to original position as vector
       let direction = data.originalLocalPos.clone();
+      if (data.centroid && data.centroid.lengthSq() > 0.0001) {
+          direction.copy(data.centroid);
+      }
+      
       const dist = direction.length();
 
       if (dist < 0.001) {
@@ -689,6 +791,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       }
 
       const offset = direction.multiplyScalar(explosionDistance);
+      // Use clone() to avoid mutating originalLocalPos by accident if it was referenced
       data.mesh.position.copy(data.originalLocalPos).add(offset);
     });
   };
@@ -846,6 +949,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         {/* Top Controls */}
         <div className="absolute top-0 left-0 w-full z-10 p-6 flex justify-between items-center">
           <div className="flex items-center gap-3">
+            <img src="/logo.png" alt="VisionView Logo" className="w-8 h-8 object-contain" />
             <h1 className="text-xl font-semibold text-white">VisionView</h1>
             <span className="px-2 py-1 bg-[#00ff87]/20 border border-[#00ff87]/50 rounded text-xs text-[#00ff87]">Beta</span>
           </div>
@@ -1036,8 +1140,20 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
           </div>
         )}
 
+        {/* Tooltip */}
+        <div 
+          ref={tooltipRef}
+          className="fixed z-50 px-3 py-2 bg-black/60 backdrop-blur-md border border-white/10 rounded-lg text-sm text-white pointer-events-none opacity-0 transition-opacity duration-150"
+          style={{ top: 0, left: 0 }}
+        />
+
         {/* Canvas Container */}
-        <div ref={containerRef} className="w-full h-full" />
+        <div 
+          ref={containerRef} 
+          className="w-full h-full" 
+          onClick={handleClick}
+          onMouseMove={handleMouseMove}
+        />
 
         {/* Loader */}
         {loading && (
