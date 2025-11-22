@@ -1,131 +1,154 @@
 'use client';
 
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
+
+const CubeViewer = dynamic(() => import('@/components/CubeViewer'), { ssr: false });
 
 export default function Home() {
-
   return (
-    <div className="relative min-h-screen bg-[#0a0a0a] text-white overflow-hidden">
-      {/* Grid Background Pattern */}
-      <div 
-        className="fixed inset-0 opacity-30 pointer-events-none"
-        style={{
-          backgroundImage: `
-            linear-gradient(rgba(0, 255, 135, 0.03) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(0, 255, 135, 0.03) 1px, transparent 1px)
-          `,
-          backgroundSize: '50px 50px'
-        }}
-      />
+    <div className="relative min-h-screen bg-[#E5E6DA] text-[#1D1E15] font-mono overflow-hidden flex flex-col">
       
-      {/* Diagonal Lines */}
-      <div 
-        className="fixed inset-0 opacity-20 pointer-events-none"
-        style={{
-          background: 'linear-gradient(135deg, transparent 0%, rgba(0, 255, 135, 0.02) 50%, transparent 100%)'
-        }}
-      />
-
       {/* Navigation Header */}
-      <nav className="relative z-50 px-8 py-4 flex justify-between items-center">
-        <div className="flex items-center gap-8">
-          <div className="flex items-center gap-2">
-            <img src="/logo.png" alt="VisionView Logo" className="w-8 h-8 object-contain" />
-            <h1 className="text-xl font-semibold text-white">VisionView</h1>
+      <nav className="border-b border-[#1D1E15] px-0 h-20 flex justify-between items-center bg-[#E5E6DA] z-50">
+        <div className="flex items-center h-full flex-1">
+          {/* Logo Box - Aligned with Left Sidebar */}
+          {/* Use 8.333333% width to match 1/12 grid column exactly */}
+          <div className="w-[179px] h-full flex items-center justify-center bg-[#E5E6DA] shrink-0">
+             <div className="w-12 h-12 flex items-center justify-center">
+               <img src="/logo.png" alt="VisionView Logo" className="w-8 h-8 object-contain invert" />
+             </div>
           </div>
-          <div className="flex items-center gap-6 text-sm text-white/60">
-            <a href="#" className="hover:text-white transition-colors">PROTOCOL</a>
-            <span>/</span>
-            <a href="#" className="hover:text-white transition-colors">DEVELOPERS</a>
-            <span>/</span>
-            <a href="#" className="hover:text-white transition-colors">INTEGRATIONS</a>
-            <span>/</span>
-            <a href="#" className="hover:text-white transition-colors">TELEMETRY</a>
-            <span>/</span>
-            <a href="#" className="hover:text-white transition-colors">COMMUNITY</a>
+          
+          {/* Nav Items starting right after the box */}
+          <div className="hidden md:flex h-full items-center px-8 gap-10 text-xs font-medium uppercase tracking-wide flex-1">
+            {['Protocol', 'Developers', 'Integrations', 'Telemetry', 'Community'].map((item) => (
+              <div key={item} className="flex items-center gap-10 group">
+                <a 
+                  href="#" 
+                  className="hover:text-[#DF6C42] transition-colors"
+                >
+                  {item}
+                </a>
+                <span className="text-[#1D1E15]/20 group-last:hidden">/</span>
+              </div>
+            ))}
           </div>
         </div>
-        <Link
-          href="/dashboard"
-          className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-sm hover:bg-white/10 transition-colors"
-        >
-          Dashboard
-        </Link>
+        
+        <div className="flex items-center gap-6 px-8">
+          <div className="text-xs uppercase tracking-widest opacity-50">v.2.0.4</div>
+          <Link
+            href="/dashboard"
+            className="px-6 py-2 bg-[#DF6C42] text-[#E5E6DA] text-xs uppercase font-bold hover:bg-[#1D1E15] transition-colors"
+          >
+            Login
+          </Link>
+        </div>
       </nav>
 
-      {/* Main Content */}
-      <main className="relative z-10 pt-24 pb-32">
-        <div className="max-w-7xl mx-auto px-8 grid grid-cols-2 gap-16 items-center min-h-[calc(100vh-8rem)]">
-          {/* Left Content */}
-          <div className="space-y-8">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/5 border border-white/10 rounded-full text-xs text-white/70">
-              <span className="w-2 h-2 rounded-full bg-[#00ff87]"></span>
-              Layer-0 connectivity
+      {/* Main Content Grid */}
+      <main className="flex-1 grid grid-cols-12 divide-x divide-[#1D1E15]">
+        
+        {/* Left Sidebar (Empty/Decor) */}
+        <div className="hidden lg:block col-span-1 relative bg-[#E5E6DA] overflow-hidden">
+           {/* Diagonal Lines SVG Background */}
+           <div className="absolute inset-0 opacity-[0.1]" style={{ 
+             backgroundImage: 'repeating-linear-gradient(45deg, #1D1E15 0, #1D1E15 1px, transparent 0, transparent 50%)', 
+             backgroundSize: '10px 10px' 
+           }} />
+           
+           <div className="absolute bottom-8 left-8 -rotate-90 origin-bottom-left text-xs uppercase opacity-40 font-regular whitespace-nowrap z-10">
+              System Status: Nominal
+           </div>
+        </div>
+
+        {/* Main Hero Content */}
+        <div className="col-span-12 lg:col-span-7 flex flex-col divide-y divide-[#1D1E15]">
+          
+          {/* Hero Section */}
+          <div className="flex-1 p-12 flex flex-col justify-center gap-8">
+            <div className="inline-flex items-center gap-2 px-3 py-1 border border-[#1D1E15] text-xs uppercase tracking-wider w-fit">
+              <div className="w-2 h-2 bg-[#DF6C42]"></div>
+              HackWestern 12
             </div>
             
-            <h2 className="text-6xl font-semibold text-white leading-tight">
-              The Coordination Layer<br/>for All Models
+            <h2 className="text-6xl font-sans font-medium leading-none tracking-tight text-[#1D1E15]">
+              The Coordination<br/> Layer for GeoSpatial Data
             </h2>
             
-            <p className="text-lg text-white/70 leading-relaxed max-w-xl">
-              Fast, verifiable, and trust-minimized 3D model processing. Generate meshes, split components, and visualize geometry — without complex pipelines.
+            <p className="text-lg opacity-70 max-w-xl leading-relaxed">
+              Blazing fast 3D model processing. Generate meshes, split components, and visualize geometry — without complex pipelines.
             </p>
             
-            <div className="flex items-center gap-4">
-              <button className="px-6 py-3 bg-white/5 border border-white/10 rounded-lg text-sm hover:bg-white/10 transition-colors">
-                Read Docs
+            <div className="flex items-center gap-4 pt-4">
+              <button className="px-8 py-4 border border-[#1D1E15] text-xs uppercase font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors">
+                Read Documentation
               </button>
               <Link
                 href="/dashboard"
-                className="px-6 py-3 bg-[#00ff87] text-black rounded-lg text-sm font-medium hover:bg-[#00e677] transition-colors"
+                className="px-8 py-4 bg-[#DF6C42] text-[#E5E6DA] text-xs uppercase font-bold hover:bg-[#1D1E15] transition-colors"
               >
                 Launch Demo
               </Link>
             </div>
-            
-            <div className="flex items-center gap-8 pt-8">
-              <div className="text-white/40 text-sm">SOLANA</div>
-              <div className="text-white/40 text-sm">polygon</div>
-              <div className="text-white/40 text-sm">ARBITRUM</div>
-              <div className="text-white/40 text-sm">phantom</div>
-            </div>
           </div>
-          
-          {/* Right Content - Metrics & Visualization */}
-          <div className="space-y-8">
-            <div className="flex items-center justify-between">
-              <div className="px-4 py-2 bg-[#00ff87]/20 border border-[#00ff87]/50 rounded-lg text-xs font-medium text-[#00ff87]">
-                ALL SYSTEMS OPERATIONAL
+
+          {/* Ecosystem Partners */}
+          <div className="h-24 grid grid-cols-4 divide-x divide-[#1D1E15]">
+            {['SOLANA', 'POLYGON', 'ARBITRUM', 'PHANTOM'].map((partner) => (
+              <div key={partner} className="flex items-center justify-center text-xs font-bold opacity-40 hover:opacity-100 hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-all cursor-default">
+                {partner}
               </div>
-              <div className="flex gap-1">
-                <div className="w-1 h-8 bg-[#00ff87] rounded"></div>
-                <div className="w-1 h-6 bg-[#00ff87]/60 rounded"></div>
-                <div className="w-1 h-4 bg-[#00ff87]/40 rounded"></div>
-              </div>
-            </div>
-            
-            {/* 3D Canvas Placeholder */}
-            <div className="w-full h-96 bg-black/20 border border-white/10 rounded-2xl overflow-hidden relative flex items-center justify-center">
-              <div className="text-white/30 text-sm">3D Visualization</div>
-            </div>
-            
-            {/* Metrics */}
-            <div className="grid grid-cols-3 gap-6">
-              <div>
-                <div className="text-xs text-white/50 uppercase tracking-wider mb-2">Connected Models</div>
-                <div className="text-2xl font-semibold text-white">42_</div>
-              </div>
-              <div>
-                <div className="text-xs text-white/50 uppercase tracking-wider mb-2">Meshes Processed</div>
-                <div className="text-2xl font-semibold text-white">2.1M_</div>
-              </div>
-              <div>
-                <div className="text-xs text-white/50 uppercase tracking-wider mb-2">Total Vertices</div>
-                <div className="text-2xl font-semibold text-white">$1.72B_</div>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
+
+        {/* Right Visualization Column */}
+        <div className="col-span-12 lg:col-span-4 flex flex-col divide-y divide-[#1D1E15] bg-[#E5E6DA]">
+          
+          {/* Status Header */}
+          <div className="p-6 flex justify-between items-center">
+            <div className="text-xs uppercase font-bold">Data Volume</div>
+            <div className="text-xs font-mono">0h:12m:43s</div>
+          </div>
+
+          {/* 3D Visualization Box */}
+          <div className="aspect-square border-b border-[#1D1E15] relative overflow-hidden bg-[#E5E6DA]">
+             <div className="absolute inset-0 flex items-center justify-center">
+                <CubeViewer />
+             </div>
+             {/* Overlay UI Elements */}
+             <div className="absolute top-4 left-4 text-[10px] uppercase opacity-50">Rendering...</div>
+             <div className="absolute bottom-4 right-4 text-[10px] uppercase opacity-50">36GB/s</div>
+          </div>
+
+          {/* Metrics Grid */}
+          <div className="flex-1 grid grid-rows-3 divide-y divide-[#1D1E15]">
+             <div className="p-6 flex flex-col justify-center group hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors">
+                <div className="text-[10px] uppercase opacity-50 mb-1">Connected Models</div>
+                <div className="text-2xl font-bold">42_</div>
+                <div className="w-full h-1 bg-[#DF6C42]/20 mt-2 overflow-hidden">
+                   <div className="h-full w-3/4 bg-[#DF6C42]"></div>
+                </div>
+             </div>
+             <div className="p-6 flex flex-col justify-center group hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors">
+                <div className="text-[10px] uppercase opacity-50 mb-1">Meshes Processed</div>
+                <div className="text-2xl font-bold">2.1M_</div>
+                <div className="w-full h-1 bg-[#DF6C42]/20 mt-2 overflow-hidden">
+                   <div className="h-full w-1/2 bg-[#DF6C42]"></div>
+                </div>
+             </div>
+             <div className="p-6 flex flex-col justify-center group hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors">
+                <div className="text-[10px] uppercase opacity-50 mb-1">Total Vertices</div>
+                <div className="text-2xl font-bold">$1.72B_</div>
+                <div className="w-full h-1 bg-[#DF6C42]/20 mt-2 overflow-hidden">
+                   <div className="h-full w-full bg-[#DF6C42]"></div>
+                </div>
+             </div>
+          </div>
+        </div>
+
       </main>
     </div>
   );
