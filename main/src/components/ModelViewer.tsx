@@ -716,6 +716,17 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
           sumZ / positions.count
         );
 
+        // Center the geometry to its own origin so rotation/scaling works from center
+        newGeo.translate(-geometryCenter.x, -geometryCenter.y, -geometryCenter.z);
+
+        // mats is already defined above (line 694), reusing it.
+        
+        // newMesh is already defined above (line 695). We are modifying it, but since it was created with newGeo BEFORE translation,
+        // the geometry update (translate) will reflect in the mesh.
+        // However, we need to update the userData if we wanted to change it, but the previous code set it up correctly.
+        // The issue with the previous code was that newMesh was at (0,0,0) relative to parent, but geometry was offset.
+        // Now geometry is centered at (0,0,0), and we will move newMesh to the centroid position.
+
         const localPos = geometryCenter.clone();
 
         componentData.push({
@@ -749,7 +760,8 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   };
 
   const applyExplodedView = (group: THREE.Group, componentData: ComponentData[], center: THREE.Vector3) => {
-    if (!isExploded || explosionDistance === 0) {
+    // If not exploded OR distance is near zero, reset to original positions
+    if (!isExploded || explosionDistance <= 0.05) {
       componentData.forEach(data => {
         data.mesh.position.copy(data.originalLocalPos);
       });
@@ -757,7 +769,13 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     }
 
     componentData.forEach((data, idx) => {
+      // Calculate direction from center
+      // Use centroid if available, else fallback to original position as vector
       let direction = data.originalLocalPos.clone();
+      if (data.centroid && data.centroid.lengthSq() > 0.0001) {
+          direction.copy(data.centroid);
+      }
+      
       const dist = direction.length();
 
       if (dist < 0.001) {
@@ -773,6 +791,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       }
 
       const offset = direction.multiplyScalar(explosionDistance);
+      // Use clone() to avoid mutating originalLocalPos by accident if it was referenced
       data.mesh.position.copy(data.originalLocalPos).add(offset);
     });
   };
