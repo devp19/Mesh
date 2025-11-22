@@ -696,10 +696,14 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         return;
       }
 
-      // Calculate original mesh center
-      const originalBox = new THREE.Box3().setFromObject(mesh);
-      const originalCenter = new THREE.Vector3();
-      originalBox.getCenter(originalCenter);
+      // Calculate local geometry center for explosion origin
+      let localCenter = new THREE.Vector3();
+      if (indexedGeom.boundingBox) {
+         indexedGeom.boundingBox.getCenter(localCenter);
+      } else {
+         indexedGeom.computeBoundingBox();
+         indexedGeom.boundingBox!.getCenter(localCenter);
+      }
 
       // Reconstruct meshes
       const newGroup = new THREE.Group();
@@ -783,13 +787,13 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
 
       // Store exploded view data
       explodedGroupsRef.current.set(newGroup, {
-        originalCenter,
+        originalCenter: localCenter,
         components: componentData
       });
 
       // Enable exploded view
       setIsExploded(true);
-      applyExplodedView(newGroup, componentData, originalCenter);
+      applyExplodedView(newGroup, componentData, localCenter);
       setShowExplodedControls(true);
 
       // Cleanup
@@ -810,9 +814,11 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
 
     componentData.forEach((data, idx) => {
       // Calculate direction from center
-      let direction = data.originalLocalPos.clone();
-      if (data.centroid && data.centroid.lengthSq() > 0.0001) {
-          direction.copy(data.centroid);
+      let direction = new THREE.Vector3();
+      if (data.centroid) {
+        direction.subVectors(data.centroid, center);
+      } else {
+        direction.subVectors(data.originalLocalPos, center);
       }
       
       const dist = direction.length();
@@ -868,10 +874,6 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   };
 
   const setupMultiMeshExplodedView = (group: THREE.Group, meshes: THREE.Mesh[]) => {
-    const overallBox = new THREE.Box3().setFromObject(group);
-    const overallCenter = new THREE.Vector3();
-    overallBox.getCenter(overallCenter);
-
     const componentData: ComponentData[] = [];
     group.updateMatrixWorld();
 
@@ -902,8 +904,16 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       });
     });
 
+    // Calculate average local center based on component centroids
+    const localCenter = new THREE.Vector3();
+    if (componentData.length > 0) {
+       const box = new THREE.Box3();
+       componentData.forEach(c => box.expandByPoint(c.centroid));
+       box.getCenter(localCenter);
+    }
+
     explodedGroupsRef.current.set(group, {
-      originalCenter: overallCenter,
+      originalCenter: localCenter,
       components: componentData
     });
   };
