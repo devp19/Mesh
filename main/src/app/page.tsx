@@ -99,9 +99,18 @@ export default function Home() {
 
            {/* Ecosystem Partners */}
            <div className="h-18 grid grid-cols-4 divide-x divide-[#1D1E15] mt-auto mb-24 border-b border-[#1D1E15]">
-             {['SOLANA', 'POLYGON', 'ARBITRUM', 'PHANTOM'].map((partner) => (
-               <div key={partner} className="flex items-center justify-center text-[10px] font-bold opacity-40 hover:opacity-100 hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-all cursor-default">
-                 {partner}
+             {[
+               { name: 'GEMINI PRO', image: '/gemini-pro.png' },
+               { name: 'SKETCHFAB', image: '/sketch.png' },
+               { name: 'OPENAI', image: '/openai.png' },
+               { name: 'ARDUINO', image: '/arduino.png' }
+             ].map((partner) => (
+               <div key={partner.name} className="flex items-center justify-center opacity-40 hover:opacity-100 hover:bg-[#1D1E15] transition-all cursor-default p-2">
+                 <img 
+                   src={partner.image} 
+                   alt={partner.name} 
+                   className="h-5 w-auto object-contain filter brightness-0"
+                 />
                </div>
              ))}
            </div>
