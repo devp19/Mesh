@@ -447,143 +447,6 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       return;
     }
 
-    // Check for split mesh trigger pattern {3.0, 3.0, 3.0, 0.0} (Split Mesh)
-    if (Math.abs(qx - 3.0) < 0.01 && Math.abs(qy - 3.0) < 0.01 && 
-        Math.abs(qz - 3.0) < 0.01 && Math.abs(qw - 0.0) < 0.01) {
-      console.log("Split mesh trigger received from CAM stick", { qx, qy, qz, qw });
-      
-      // Prevent multiple rapid triggers (use ref instead of window property)
-      const now = Date.now();
-      if (now - splitMeshLastTimeRef.current < 2000) {
-        console.log("Split mesh trigger ignored - too soon since last trigger");
-        return;
-      }
-      splitMeshLastTimeRef.current = now;
-      
-      console.log("Current selectedObject:", selectedObject ? selectedObject.name : "none");
-      
-      // Auto-select first available object if none is selected (same logic as AI identify)
-      if (!selectedObject && sceneRef.current) {
-        console.log("No object selected for split mesh, searching for first available mesh...");
-        let foundObject = false;
-        let totalObjects = 0;
-        let meshObjects = 0;
-        
-        sceneRef.current.traverse((child) => {
-          totalObjects++;
-          if ((child as THREE.Mesh).isMesh) {
-            meshObjects++;
-            // Less strict requirements - any mesh with userData or name
-            if (!selectedObject && !foundObject) {
-              const userData = (child as any).userData;
-              const hasName = userData?.name || child.name;
-              
-              if (hasName || userData) {
-                console.log("Auto-selecting object for split mesh:", {
-                  name: hasName || "unnamed",
-                  userData: !!userData,
-                  meshType: (child as THREE.Mesh).geometry?.type || "unknown",
-                  hasGeometry: !!(child as THREE.Mesh).geometry,
-                  vertexCount: (child as THREE.Mesh).geometry?.attributes?.position?.count || 0
-                });
-                setSelectedObject(child);
-                selectedObjectRef.current = child;
-                foundObject = true;
-              }
-            }
-          }
-        });
-        
-        console.log(`Scene scan: ${totalObjects} total objects, ${meshObjects} meshes, found: ${foundObject}`);
-        
-        if (!foundObject) {
-          console.error("No suitable mesh objects found in scene for split mesh");
-          // Try to select the first mesh anyway as a fallback
-          sceneRef.current.traverse((child) => {
-            if ((child as THREE.Mesh).isMesh && !selectedObject) {
-              console.log("Fallback: selecting first mesh without name/userData for split mesh", {
-                meshType: (child as THREE.Mesh).geometry?.type || "unknown",
-                hasGeometry: !!(child as THREE.Mesh).geometry,
-                vertexCount: (child as THREE.Mesh).geometry?.attributes?.position?.count || 0
-              });
-              setSelectedObject(child);
-              selectedObjectRef.current = child;
-              foundObject = true;
-            }
-          });
-        }
-      }
-      
-      // Verify we have an object before proceeding
-      if (!selectedObject) {
-        console.error("Still no selected object after auto-selection attempt for split mesh");
-        return;
-      }
-      
-      // Validate the selected object for split mesh requirements
-      const mesh = selectedObject as THREE.Mesh;
-      const hasGeometry = !!(mesh.geometry);
-      const hasVertices = mesh.geometry?.attributes?.position?.count > 0;
-      const hasFaces = !!(mesh.geometry?.index) && mesh.geometry.index.array.length > 0;
-      
-      console.log("Split mesh validation:", {
-        objectName: (selectedObject as any).userData?.name || selectedObject.name || "unnamed",
-        hasGeometry,
-        hasVertices,
-        vertexCount: mesh.geometry?.attributes?.position?.count || 0,
-        hasFaces,
-        faceCount: mesh.geometry?.index ? mesh.geometry.index.array.length / 3 : 0,
-        geometryType: mesh.geometry?.type || "unknown"
-      });
-      
-      if (!hasGeometry || !hasVertices || !hasFaces) {
-        console.error("Selected object doesn't meet requirements for split mesh:", {
-          hasGeometry,
-          hasVertices,
-          hasFaces
-        });
-        return;
-      }
-      
-      // Safety check: don't process very large meshes that could freeze the app
-      const vertexCount = mesh.geometry.attributes.position.count;
-      const faceCount = mesh.geometry.index ? mesh.geometry.index.array.length / 3 : 0;
-      
-      if (vertexCount > 50000 || faceCount > 100000) {
-        console.error("Mesh too large for split mesh - would freeze the app:", {
-          vertexCount,
-          faceCount,
-          maxVertices: 50000,
-          maxFaces: 100000
-        });
-        return;
-      }
-      
-      console.log("All validations passed, calling handleSplitMesh() with object:", (selectedObject as any).userData?.name || selectedObject.name || "unnamed");
-      
-      // Trigger split mesh functionality with timeout protection
-      try {
-        console.log("About to call handleSplitMesh()...");
-        
-        // Add timeout protection
-        const splitTimeout = setTimeout(() => {
-          console.error("Split mesh operation timed out - preventing freeze");
-          setLoading(false);
-        }, 10000); // 10 second timeout
-        
-        handleSplitMesh().finally(() => {
-          clearTimeout(splitTimeout);
-        });
-        
-        console.log("Split mesh function called successfully");
-      } catch (error) {
-        console.error("Error calling handleSplitMesh:", error);
-        setLoading(false); // Ensure loading state is reset on error
-      }
-      
-      return;
-    }
-
     // Check for pause trigger pattern {0.0, 0.0, 0.0, 1.0} (identity quaternion)
     if (Math.abs(qx - 0.0) < 0.001 && Math.abs(qy - 0.0) < 0.001 && 
         Math.abs(qz - 0.0) < 0.001 && Math.abs(qw - 1.0) < 0.001) {
@@ -647,6 +510,131 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     const qy = dv.getFloat32(4, true);
     const qz = dv.getFloat32(8, true);
     const qw = dv.getFloat32(12, true);
+
+    // Check for split mesh trigger pattern {3.0, 3.0, 3.0, 0.0} (Split Mesh) - Button B
+    if (Math.abs(qx - 3.0) < 0.01 && Math.abs(qy - 3.0) < 0.01 && 
+        Math.abs(qz - 3.0) < 0.01 && Math.abs(qw - 0.0) < 0.01) {
+      console.log("Split mesh trigger received from CAM stick (Button B)", { qx, qy, qz, qw });
+      
+      // Prevent multiple rapid triggers (use ref instead of window property)
+      const now = Date.now();
+      if (now - splitMeshLastTimeRef.current < 2000) {
+        console.log("Split mesh trigger ignored - too soon since last trigger");
+        return;
+      }
+      splitMeshLastTimeRef.current = now;
+      
+      console.log("Current selectedObject (ref):", selectedObjectRef.current ? selectedObjectRef.current.name : "none");
+      
+      // Auto-select object: prefer object in center of view, fall back to first available
+      // Use ref for selectedObject to avoid stale closure issues in event listener
+      if (!selectedObjectRef.current && sceneRef.current && cameraRef.current && raycasterRef.current) {
+        console.log("No object selected (checked ref) for split mesh, performing center-screen raycast...");
+        
+        // 1. Raycast from center of screen (0, 0 in normalized device coordinates)
+        raycasterRef.current.setFromCamera(new THREE.Vector2(0, 0), cameraRef.current);
+        
+        // Filter meshes that are visible and part of the model
+        const meshes: THREE.Mesh[] = [];
+        sceneRef.current.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh && child.visible) {
+            meshes.push(child as THREE.Mesh);
+          }
+        });
+        
+        const intersects = raycasterRef.current.intersectObjects(meshes, false);
+        
+        if (intersects.length > 0) {
+          // Pick the closest visible mesh
+          const hit = intersects[0];
+          console.log("Raycast hit object:", hit.object.name || "unnamed", "distance:", hit.distance);
+          setSelectedObject(hit.object);
+          selectedObjectRef.current = hit.object;
+        } else {
+          // Fallback: if nothing in center, scan for first available mesh (existing logic)
+          console.log("Raycast found nothing, searching for first available mesh...");
+          let foundObject = false;
+          
+          sceneRef.current.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh && !foundObject) {
+              console.log("Fallback auto-select:", child.name || "unnamed");
+              setSelectedObject(child);
+              selectedObjectRef.current = child;
+              foundObject = true;
+            }
+          });
+        }
+      }
+      
+      // Verify we have an object before proceeding
+      if (!selectedObjectRef.current) {
+        console.error("Still no selected object after auto-selection attempt for split mesh");
+        return;
+      }
+      
+      // Validate the selected object for split mesh requirements
+      const mesh = selectedObjectRef.current as THREE.Mesh;
+      const hasGeometry = !!(mesh.geometry);
+      const hasVertices = mesh.geometry?.attributes?.position?.count > 0;
+      const hasFaces = !!(mesh.geometry?.index) && mesh.geometry.index.array.length > 0;
+      
+      console.log("Split mesh validation:", {
+        objectName: (selectedObjectRef.current as any).userData?.name || selectedObjectRef.current.name || "unnamed",
+        hasGeometry,
+        hasVertices,
+        vertexCount: mesh.geometry?.attributes?.position?.count || 0,
+        hasFaces,
+        faceCount: mesh.geometry?.index ? mesh.geometry.index.array.length / 3 : 0,
+        geometryType: mesh.geometry?.type || "unknown"
+      });
+      
+      if (!hasGeometry || !hasVertices || !hasFaces) {
+        console.error("Selected object doesn't meet requirements for split mesh:", {
+          hasGeometry,
+          hasVertices,
+          hasFaces
+        });
+        return;
+      }
+      
+      // Safety check: don't process very large meshes that could freeze the app
+      const vertexCount = mesh.geometry.attributes.position.count;
+      const faceCount = mesh.geometry.index ? mesh.geometry.index.array.length / 3 : 0;
+      
+      if (vertexCount > 50000 || faceCount > 100000) {
+        console.error("Mesh too large for split mesh - would freeze the app:", {
+          vertexCount,
+          faceCount,
+          maxVertices: 50000,
+          maxFaces: 100000
+        });
+        return;
+      }
+      
+      console.log("All validations passed, calling handleSplitMesh() with object:", (selectedObjectRef.current as any).userData?.name || selectedObjectRef.current.name || "unnamed");
+      
+      // Trigger split mesh functionality with timeout protection
+      try {
+        console.log("About to call handleSplitMesh()...");
+        
+        // Add timeout protection
+        const splitTimeout = setTimeout(() => {
+          console.error("Split mesh operation timed out - preventing freeze");
+          setLoading(false);
+        }, 10000); // 10 second timeout
+        
+        handleSplitMesh().finally(() => {
+          clearTimeout(splitTimeout);
+        });
+        
+        console.log("Split mesh function called successfully");
+      } catch (error) {
+        console.error("Error calling handleSplitMesh:", error);
+        setLoading(false); // Ensure loading state is reset on error
+      }
+      
+      return;
+    }
 
     qDevCamRef.current.set(qx, qy, qz, qw).normalize();
     let qRel = qDevCamRef.current.clone();
@@ -1471,14 +1459,17 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   };
 
   const handleSplitMesh = async () => {
+    // Use ref as fallback to ensure we have the latest selected object (especially for Bluetooth triggers)
+    const currentObject = selectedObject || selectedObjectRef.current;
+    
     if (
-      !selectedObject ||
-      !(selectedObject as THREE.Mesh).geometry ||
+      !currentObject ||
+      !(currentObject as THREE.Mesh).geometry ||
       !sceneRef.current
     )
       return;
 
-    const mesh = selectedObject as THREE.Mesh;
+    const mesh = currentObject as THREE.Mesh;
     const parent = mesh.parent;
     const geom = mesh.geometry;
 
