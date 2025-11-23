@@ -13,6 +13,12 @@ import * as BufferGeometryUtils from "three/addons/utils/BufferGeometryUtils.js"
 import { AnimatePresence } from "framer-motion";
 import BlockyLoader from "./BlockyLoader";
 import AIInferenceLoader from "./AIInferenceLoader";
+import {
+  isDemoMode,
+  getDemoModels,
+  findAnnotationForPart,
+  type DemoModel,
+} from "@/lib/demo-models";
 
 interface ComponentData {
   mesh: THREE.Mesh;
@@ -50,7 +56,6 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     description: "",
     type: "",
   });
-  const [showInspector, setShowInspector] = useState(false);
   const [annotationOverlay, setAnnotationOverlay] = useState<string | null>(
     null
   );
@@ -63,13 +68,23 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   const [annotatedImage, setAnnotatedImage] = useState<string | null>(null);
   const [showInferenceLoader, setShowInferenceLoader] = useState(false);
   const showInferenceLoaderRef = useRef(false);
-  useEffect(() => { showInferenceLoaderRef.current = showInferenceLoader; }, [showInferenceLoader]);
+  useEffect(() => {
+    showInferenceLoaderRef.current = showInferenceLoader;
+  }, [showInferenceLoader]);
 
   const [inferenceLoaderReady, setInferenceLoaderReady] = useState(false);
   const [objConnected, setObjConnected] = useState(false);
   const [camConnected, setCamConnected] = useState(false);
   const [objDeviceName, setObjDeviceName] = useState<string>("—");
   const [camDeviceName, setCamDeviceName] = useState<string>("—");
+
+  // Demo mode state
+  const [demoMode, setDemoMode] = useState(false);
+  const [demoModels, setDemoModels] = useState<DemoModel[]>([]);
+  const [selectedDemoModelId, setSelectedDemoModelId] = useState<string | null>(
+    null
+  );
+  const currentDemoModelRef = useRef<string | null>(null);
 
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -131,7 +146,11 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   const camZeroSetRef = useRef(false);
   const lastRelCamRef = useRef<THREE.Quaternion | null>(null);
   const lastCamPacketTimeRef = useRef(0);
-  const qAxisFixRef = useRef(new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0, 'XYZ')));
+  const qAxisFixRef = useRef(
+    new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(-Math.PI / 2, 0, 0, "XYZ")
+    )
+  );
   const eObjRef = useRef(new THREE.Euler(0, 0, 0, "YXZ"));
   const eCamRef = useRef(new THREE.Euler(0, 0, 0, "YXZ"));
   const movementPausedRef = useRef(false);
@@ -147,6 +166,31 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   useEffect(() => {
     viewModeRef.current = viewMode;
   }, [viewMode]);
+
+  // Initialize demo mode
+  useEffect(() => {
+    const checkDemoMode = async () => {
+      if (isDemoMode()) {
+        setDemoMode(true);
+        const models = await getDemoModels();
+        setDemoModels(models);
+        if (models.length > 0) {
+          setSelectedDemoModelId(models[0].id);
+          currentDemoModelRef.current = models[0].id;
+          // Auto-load the first demo model
+          // Wait for scene to be ready
+          setTimeout(() => {
+            if (sceneRef.current && models[0]) {
+              const model = models[0];
+              currentDemoModelRef.current = model.id;
+              loadModelFromUrl(model.modelUrl, false);
+            }
+          }, 500);
+        }
+      }
+    };
+    checkDemoMode();
+  }, []);
 
   // BLE UUIDs
   const SERVICE_UUID = "12345678-1234-5678-1234-56789abcdef0";
@@ -174,10 +218,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       await characteristic.startNotifications();
 
       objCharRef.current = characteristic;
-      characteristic.addEventListener(
-        "characteristicvaluechanged",
-        onObjQuat
-      );
+      characteristic.addEventListener("characteristicvaluechanged", onObjQuat);
 
       objConnectedRef.current = true;
       setObjConnected(true);
@@ -198,7 +239,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       objZeroSetRef.current = false; // Don't apply zero until user clicks Zero button
       cameraStateRef.current.translateT.set(0, 0);
       cameraStateRef.current.translateV.set(0, 0);
-      
+
       console.log("OBJ stick connected");
     } catch (error: any) {
       console.error("OBJ connect error:", error);
@@ -249,10 +290,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       await characteristic.startNotifications();
 
       camCharRef.current = characteristic;
-      characteristic.addEventListener(
-        "characteristicvaluechanged",
-        onCamQuat
-      );
+      characteristic.addEventListener("characteristicvaluechanged", onCamQuat);
 
       camConnectedRef.current = true;
       setCamConnected(true);
@@ -272,7 +310,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       qZeroCamInvRef.current.set(0, 0, 0, 1);
       camZeroSetRef.current = false; // Don't apply zero until user clicks Zero button
       lastRelCamRef.current = null;
-      
+
       console.log("CAM stick connected");
     } catch (error: any) {
       console.error("CAM connect error:", error);
@@ -320,12 +358,24 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     const qw = dv.getFloat32(12, true);
 
     // Check for AI identify trigger pattern {1.0, 1.0, 1.0, 0.0}
-    if (Math.abs(qx - 1.0) < 0.01 && Math.abs(qy - 1.0) < 0.01 && 
-        Math.abs(qz - 1.0) < 0.01 && Math.abs(qw - 0.0) < 0.01) {
-      console.log("AI identify trigger received from OBJ stick", { qx, qy, qz, qw });
-      console.log("Current selectedObject:", selectedObject ? selectedObject.name : "none");
+    if (
+      Math.abs(qx - 1.0) < 0.01 &&
+      Math.abs(qy - 1.0) < 0.01 &&
+      Math.abs(qz - 1.0) < 0.01 &&
+      Math.abs(qw - 0.0) < 0.01
+    ) {
+      console.log("AI identify trigger received from OBJ stick", {
+        qx,
+        qy,
+        qz,
+        qw,
+      });
+      console.log(
+        "Current selectedObject:",
+        selectedObject ? selectedObject.name : "none"
+      );
       console.log("AI identify modal active:", aiIdentifyActive);
-      
+
       // If AI identify modal is showing, close it on second press
       if (aiIdentifyActive) {
         console.log("AI identify modal active - closing modal");
@@ -336,14 +386,16 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         movementPausedRef.current = false;
         return;
       }
-      
+
       // Auto-select first available object if none is selected
       if (!selectedObject && sceneRef.current) {
-        console.log("No object selected, searching for first available mesh...");
+        console.log(
+          "No object selected, searching for first available mesh..."
+        );
         let foundObject = false;
         let totalObjects = 0;
         let meshObjects = 0;
-        
+
         sceneRef.current.traverse((child) => {
           totalObjects++;
           if ((child as THREE.Mesh).isMesh) {
@@ -352,12 +404,12 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
             if (!selectedObject && !foundObject) {
               const userData = (child as any).userData;
               const hasName = userData?.name || child.name;
-              
+
               if (hasName || userData) {
                 console.log("Auto-selecting object for AI identify:", {
                   name: hasName || "unnamed",
                   userData: !!userData,
-                  meshType: (child as THREE.Mesh).geometry?.type || "unknown"
+                  meshType: (child as THREE.Mesh).geometry?.type || "unknown",
                 });
                 setSelectedObject(child);
                 selectedObjectRef.current = child;
@@ -366,15 +418,21 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
             }
           }
         });
-        
-        console.log(`Scene scan: ${totalObjects} total objects, ${meshObjects} meshes, found: ${foundObject}`);
-        
+
+        console.log(
+          `Scene scan: ${totalObjects} total objects, ${meshObjects} meshes, found: ${foundObject}`
+        );
+
         if (!foundObject) {
-          console.error("No suitable mesh objects found in scene for AI identify");
+          console.error(
+            "No suitable mesh objects found in scene for AI identify"
+          );
           // Try to select the first mesh anyway as a fallback
           sceneRef.current.traverse((child) => {
             if ((child as THREE.Mesh).isMesh && !selectedObject) {
-              console.log("Fallback: selecting first mesh without name/userData");
+              console.log(
+                "Fallback: selecting first mesh without name/userData"
+              );
               setSelectedObject(child);
               selectedObjectRef.current = child;
               foundObject = true;
@@ -382,18 +440,23 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
           });
         }
       }
-      
+
       // Verify we have an object before proceeding
       if (!selectedObject) {
         console.error("Still no selected object after auto-selection attempt");
         return;
       }
-      
-      console.log("Calling identifyPart() with object:", (selectedObject as any).userData?.name || selectedObject.name || "unnamed");
-      
+
+      console.log(
+        "Calling identifyPart() with object:",
+        (selectedObject as any).userData?.name ||
+          selectedObject.name ||
+          "unnamed"
+      );
+
       // Mark AI identify as active and call the function
       setAiIdentifyActive(true);
-      
+
       // Simple AI identify - just trigger the function without complex auto-selection
       try {
         identifyPart();
@@ -402,17 +465,26 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         console.error("Error calling identifyPart:", error);
         setAiIdentifyActive(false); // Reset on error
       }
-      
+
       // Resume movement after AI identify
       movementPausedRef.current = false;
       return;
     }
 
     // Check for zoom trigger pattern {-1.0, -1.0, -1.0, 0.0} (Zoom In)
-    if (Math.abs(qx + 1.0) < 0.01 && Math.abs(qy + 1.0) < 0.01 && 
-        Math.abs(qz + 1.0) < 0.01 && Math.abs(qw - 0.0) < 0.01) {
-      console.log("Zoom IN trigger received from OBJ stick", { qx, qy, qz, qw });
-      
+    if (
+      Math.abs(qx + 1.0) < 0.01 &&
+      Math.abs(qy + 1.0) < 0.01 &&
+      Math.abs(qz + 1.0) < 0.01 &&
+      Math.abs(qw - 0.0) < 0.01
+    ) {
+      console.log("Zoom IN trigger received from OBJ stick", {
+        qx,
+        qy,
+        qz,
+        qw,
+      });
+
       // Zoom in by reducing camera distance
       if (cameraRef.current) {
         const currentState = cameraStateRef.current;
@@ -421,15 +493,24 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         currentState.camElT = currentState.camEl;
         console.log("Zoomed in, new camera distance:", currentState.camR);
       }
-      
+
       return;
     }
 
     // Check for zoom out trigger pattern {-2.0, -2.0, -2.0, 0.0} (Zoom Out)
-    if (Math.abs(qx + 2.0) < 0.01 && Math.abs(qy + 2.0) < 0.01 && 
-        Math.abs(qz + 2.0) < 0.01 && Math.abs(qw - 0.0) < 0.01) {
-      console.log("Zoom OUT trigger received from OBJ stick", { qx, qy, qz, qw });
-      
+    if (
+      Math.abs(qx + 2.0) < 0.01 &&
+      Math.abs(qy + 2.0) < 0.01 &&
+      Math.abs(qz + 2.0) < 0.01 &&
+      Math.abs(qw - 0.0) < 0.01
+    ) {
+      console.log("Zoom OUT trigger received from OBJ stick", {
+        qx,
+        qy,
+        qz,
+        qw,
+      });
+
       // Zoom out by increasing camera distance
       if (cameraRef.current) {
         const currentState = cameraStateRef.current;
@@ -438,15 +519,24 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         currentState.camElT = currentState.camEl;
         console.log("Zoomed out, new camera distance:", currentState.camR);
       }
-      
+
       return;
     }
 
     // Check for split mesh trigger pattern {3.0, 3.0, 3.0, 0.0} (Split Mesh)
-    if (Math.abs(qx - 3.0) < 0.01 && Math.abs(qy - 3.0) < 0.01 && 
-        Math.abs(qz - 3.0) < 0.01 && Math.abs(qw - 0.0) < 0.01) {
-      console.log("Split mesh trigger received from CAM stick", { qx, qy, qz, qw });
-      
+    if (
+      Math.abs(qx - 3.0) < 0.01 &&
+      Math.abs(qy - 3.0) < 0.01 &&
+      Math.abs(qz - 3.0) < 0.01 &&
+      Math.abs(qw - 0.0) < 0.01
+    ) {
+      console.log("Split mesh trigger received from CAM stick", {
+        qx,
+        qy,
+        qz,
+        qw,
+      });
+
       // Prevent multiple rapid triggers (use ref instead of window property)
       const now = Date.now();
       if (now - splitMeshLastTimeRef.current < 2000) {
@@ -454,16 +544,21 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         return;
       }
       splitMeshLastTimeRef.current = now;
-      
-      console.log("Current selectedObject:", selectedObject ? selectedObject.name : "none");
-      
+
+      console.log(
+        "Current selectedObject:",
+        selectedObject ? selectedObject.name : "none"
+      );
+
       // Auto-select first available object if none is selected (same logic as AI identify)
       if (!selectedObject && sceneRef.current) {
-        console.log("No object selected for split mesh, searching for first available mesh...");
+        console.log(
+          "No object selected for split mesh, searching for first available mesh..."
+        );
         let foundObject = false;
         let totalObjects = 0;
         let meshObjects = 0;
-        
+
         sceneRef.current.traverse((child) => {
           totalObjects++;
           if ((child as THREE.Mesh).isMesh) {
@@ -472,14 +567,16 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
             if (!selectedObject && !foundObject) {
               const userData = (child as any).userData;
               const hasName = userData?.name || child.name;
-              
+
               if (hasName || userData) {
                 console.log("Auto-selecting object for split mesh:", {
                   name: hasName || "unnamed",
                   userData: !!userData,
                   meshType: (child as THREE.Mesh).geometry?.type || "unknown",
                   hasGeometry: !!(child as THREE.Mesh).geometry,
-                  vertexCount: (child as THREE.Mesh).geometry?.attributes?.position?.count || 0
+                  vertexCount:
+                    (child as THREE.Mesh).geometry?.attributes?.position
+                      ?.count || 0,
                 });
                 setSelectedObject(child);
                 selectedObjectRef.current = child;
@@ -488,19 +585,28 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
             }
           }
         });
-        
-        console.log(`Scene scan: ${totalObjects} total objects, ${meshObjects} meshes, found: ${foundObject}`);
-        
+
+        console.log(
+          `Scene scan: ${totalObjects} total objects, ${meshObjects} meshes, found: ${foundObject}`
+        );
+
         if (!foundObject) {
-          console.error("No suitable mesh objects found in scene for split mesh");
+          console.error(
+            "No suitable mesh objects found in scene for split mesh"
+          );
           // Try to select the first mesh anyway as a fallback
           sceneRef.current.traverse((child) => {
             if ((child as THREE.Mesh).isMesh && !selectedObject) {
-              console.log("Fallback: selecting first mesh without name/userData for split mesh", {
-                meshType: (child as THREE.Mesh).geometry?.type || "unknown",
-                hasGeometry: !!(child as THREE.Mesh).geometry,
-                vertexCount: (child as THREE.Mesh).geometry?.attributes?.position?.count || 0
-              });
+              console.log(
+                "Fallback: selecting first mesh without name/userData for split mesh",
+                {
+                  meshType: (child as THREE.Mesh).geometry?.type || "unknown",
+                  hasGeometry: !!(child as THREE.Mesh).geometry,
+                  vertexCount:
+                    (child as THREE.Mesh).geometry?.attributes?.position
+                      ?.count || 0,
+                }
+              );
               setSelectedObject(child);
               selectedObjectRef.current = child;
               foundObject = true;
@@ -508,80 +614,102 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
           });
         }
       }
-      
+
       // Verify we have an object before proceeding
       if (!selectedObject) {
-        console.error("Still no selected object after auto-selection attempt for split mesh");
+        console.error(
+          "Still no selected object after auto-selection attempt for split mesh"
+        );
         return;
       }
-      
+
       // Validate the selected object for split mesh requirements
       const mesh = selectedObject as THREE.Mesh;
-      const hasGeometry = !!(mesh.geometry);
+      const hasGeometry = !!mesh.geometry;
       const hasVertices = mesh.geometry?.attributes?.position?.count > 0;
-      const hasFaces = !!(mesh.geometry?.index) && mesh.geometry.index.array.length > 0;
-      
+      const hasFaces =
+        !!mesh.geometry?.index && mesh.geometry.index.array.length > 0;
+
       console.log("Split mesh validation:", {
-        objectName: (selectedObject as any).userData?.name || selectedObject.name || "unnamed",
+        objectName:
+          (selectedObject as any).userData?.name ||
+          selectedObject.name ||
+          "unnamed",
         hasGeometry,
         hasVertices,
         vertexCount: mesh.geometry?.attributes?.position?.count || 0,
         hasFaces,
-        faceCount: mesh.geometry?.index ? mesh.geometry.index.array.length / 3 : 0,
-        geometryType: mesh.geometry?.type || "unknown"
+        faceCount: mesh.geometry?.index
+          ? mesh.geometry.index.array.length / 3
+          : 0,
+        geometryType: mesh.geometry?.type || "unknown",
       });
-      
+
       if (!hasGeometry || !hasVertices || !hasFaces) {
-        console.error("Selected object doesn't meet requirements for split mesh:", {
-          hasGeometry,
-          hasVertices,
-          hasFaces
-        });
+        console.error(
+          "Selected object doesn't meet requirements for split mesh:",
+          {
+            hasGeometry,
+            hasVertices,
+            hasFaces,
+          }
+        );
         return;
       }
-      
+
       // Safety check: don't process very large meshes that could freeze the app
       const vertexCount = mesh.geometry.attributes.position.count;
-      const faceCount = mesh.geometry.index ? mesh.geometry.index.array.length / 3 : 0;
-      
+      const faceCount = mesh.geometry.index
+        ? mesh.geometry.index.array.length / 3
+        : 0;
+
       if (vertexCount > 50000 || faceCount > 100000) {
         console.error("Mesh too large for split mesh - would freeze the app:", {
           vertexCount,
           faceCount,
           maxVertices: 50000,
-          maxFaces: 100000
+          maxFaces: 100000,
         });
         return;
       }
-      
-      console.log("All validations passed, calling handleSplitMesh() with object:", (selectedObject as any).userData?.name || selectedObject.name || "unnamed");
-      
+
+      console.log(
+        "All validations passed, calling handleSplitMesh() with object:",
+        (selectedObject as any).userData?.name ||
+          selectedObject.name ||
+          "unnamed"
+      );
+
       // Trigger split mesh functionality with timeout protection
       try {
         console.log("About to call handleSplitMesh()...");
-        
+
         // Add timeout protection
         const splitTimeout = setTimeout(() => {
           console.error("Split mesh operation timed out - preventing freeze");
           setLoading(false);
         }, 10000); // 10 second timeout
-        
+
         handleSplitMesh().finally(() => {
           clearTimeout(splitTimeout);
         });
-        
+
         console.log("Split mesh function called successfully");
       } catch (error) {
         console.error("Error calling handleSplitMesh:", error);
         setLoading(false); // Ensure loading state is reset on error
       }
-      
+
       return;
     }
 
     // Check for pause trigger pattern {0.0, 0.0, 0.0, 1.0} (identity quaternion)
-    if (Math.abs(qx - 0.0) < 0.001 && Math.abs(qy - 0.0) < 0.001 && 
-        Math.abs(qz - 0.0) < 0.001 && Math.abs(qw - 1.0) < 0.001) {
+    if (
+      Math.abs(qx - 0.0) < 0.001 &&
+      Math.abs(qy - 0.0) < 0.001 &&
+      Math.abs(qz - 0.0) < 0.001 &&
+      Math.abs(qw - 1.0) < 0.001
+    ) {
       console.log("Movement pause trigger received from OBJ stick");
       movementPausedRef.current = !movementPausedRef.current; // Toggle pause
       // Stop all movement immediately when paused
@@ -604,30 +732,37 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     qRel.premultiply(qAxisFixRef.current);
 
     eObjRef.current.setFromQuaternion(qRel, "YXZ");
-    
+
     // Apply very aggressive dead zone to eliminate jitter
     const DEAD_ZONE = 0.25; // Much larger dead zone
     let tiltX = eObjRef.current.x;
     let tiltY = eObjRef.current.y;
-    
+
     if (Math.abs(tiltX) < DEAD_ZONE) tiltX = 0;
     if (Math.abs(tiltY) < DEAD_ZONE) tiltY = 0;
-    
+
     // Apply very strong smoothing filter for ultra-smooth movements
     const smoothedX = tiltX * 0.2; // Much stronger filtering
     const smoothedY = tiltY * 0.2; // Much stronger filtering
-    
+
     cameraStateRef.current.translateT.set(
-      smoothedY * 0.8,  // Further reduced sensitivity
-      smoothedX * 0.6   // Further reduced sensitivity
+      smoothedY * 0.8, // Further reduced sensitivity
+      smoothedX * 0.6 // Further reduced sensitivity
     );
-    
+
     // Debug: log first few updates
     if (!objZeroSetRef.current || Math.random() < 0.01) {
       console.log("OBJ quat update:", {
-        euler: { x: eObjRef.current.x, y: eObjRef.current.y, z: eObjRef.current.z },
+        euler: {
+          x: eObjRef.current.x,
+          y: eObjRef.current.y,
+          z: eObjRef.current.z,
+        },
         filtered: { x: smoothedX, y: smoothedY },
-        translateT: { x: cameraStateRef.current.translateT.x, y: cameraStateRef.current.translateT.y }
+        translateT: {
+          x: cameraStateRef.current.translateT.x,
+          y: cameraStateRef.current.translateT.y,
+        },
       });
     }
   };
@@ -648,16 +783,17 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     if (camZeroSetRef.current) qRel.premultiply(qZeroCamInvRef.current);
     qRel.premultiply(qAxisFixRef.current);
 
-    if (
-      !lastRelCamRef.current ||
-      now - lastCamPacketTimeRef.current > 220
-    ) {
+    if (!lastRelCamRef.current || now - lastCamPacketTimeRef.current > 220) {
       lastRelCamRef.current = qRel.clone();
       lastCamPacketTimeRef.current = now;
       return;
     }
 
-    const qDelta = lastRelCamRef.current.clone().invert().multiply(qRel).normalize();
+    const qDelta = lastRelCamRef.current
+      .clone()
+      .invert()
+      .multiply(qRel)
+      .normalize();
     eCamRef.current.setFromQuaternion(qDelta, "YXZ");
 
     let dYaw = eCamRef.current.y;
@@ -674,14 +810,14 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
 
     lastRelCamRef.current.copy(qRel);
     lastCamPacketTimeRef.current = now;
-    
+
     // Debug: log first few updates
     if (!camZeroSetRef.current || Math.random() < 0.01) {
       console.log("CAM quat update:", {
         dYaw,
         dPitch,
         camAzT: cameraStateRef.current.camAzT,
-        camElT: cameraStateRef.current.camElT
+        camElT: cameraStateRef.current.camElT,
       });
     }
   };
@@ -715,7 +851,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     cameraStateRef.current.camEl = DEFAULT_EL;
     cameraStateRef.current.camAzT = DEFAULT_AZ;
     cameraStateRef.current.camElT = DEFAULT_EL;
-    
+
     camera.position.set(
       DEFAULT_R * Math.cos(DEFAULT_EL) * Math.sin(DEFAULT_AZ),
       DEFAULT_R * Math.sin(DEFAULT_EL),
@@ -798,7 +934,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     // Placeholder spinning wireframe rounded cube
     const roundedCubeGeometry = new THREE.BoxGeometry(2, 2, 2, 4, 4, 4);
     const wireframeMaterial = new THREE.MeshBasicMaterial({
-      color: 0x1D1E15,
+      color: 0x1d1e15,
       wireframe: true,
       transparent: true,
       opacity: 0.6,
@@ -812,17 +948,20 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     let lastT = performance.now();
     const animate = () => {
       animationFrameRef.current = requestAnimationFrame(animate);
-      
+
       const now = performance.now();
       const dt = Math.max(0, now - lastT);
       lastT = now;
 
       // Update camera based on stick inputs if connected (use refs for real-time checking)
       // Pause stick control if inference loader is active (to allow auto-rotation)
-      if ((objConnectedRef.current || camConnectedRef.current) && !showInferenceLoaderRef.current) {
+      if (
+        (objConnectedRef.current || camConnectedRef.current) &&
+        !showInferenceLoaderRef.current
+      ) {
         const state = cameraStateRef.current;
         const camera = cameraRef.current;
-        
+
         if (camera) {
           // Smooth interpolation for translate
           if (objConnectedRef.current) {
@@ -908,7 +1047,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       window.removeEventListener("resize", onWindowResize);
       if (animationFrameRef.current)
         cancelAnimationFrame(animationFrameRef.current);
-      
+
       // Cleanup BLE connections
       try {
         if (objDevRef.current?.gatt?.connected) {
@@ -920,7 +1059,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       } catch (error) {
         console.error("Error disconnecting BLE devices:", error);
       }
-      
+
       if (containerRef.current && renderer.domElement) {
         containerRef.current.removeChild(renderer.domElement);
       }
@@ -949,7 +1088,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
 
   const handleMouseMove = (event: React.MouseEvent) => {
     if (
-      showInferenceLoader || 
+      showInferenceLoader ||
       !containerRef.current ||
       !raycasterRef.current ||
       !cameraRef.current ||
@@ -1010,7 +1149,12 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   };
 
   const handleClick = (event: React.MouseEvent) => {
-    if (showInferenceLoader || !raycasterRef.current || !cameraRef.current || !sceneRef.current)
+    if (
+      showInferenceLoader ||
+      !raycasterRef.current ||
+      !cameraRef.current ||
+      !sceneRef.current
+    )
       return;
 
     raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
@@ -1177,6 +1321,18 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         setLoading(false);
       }
     );
+  };
+
+  const loadDemoModel = (modelId: string) => {
+    const model = demoModels.find((m) => m.id === modelId);
+    if (!model) {
+      console.error("Demo model not found:", modelId);
+      return;
+    }
+
+    currentDemoModelRef.current = modelId;
+    setSelectedDemoModelId(modelId);
+    loadModelFromUrl(model.modelUrl, false);
   };
 
   const generateModel = async (prompt: string) => {
@@ -1399,8 +1555,8 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       type: userData.type,
     });
 
-    // Load cached annotation if available
-    if (userData.annotatedImage) {
+    // Load cached annotation if available (non-demo mode)
+    if (!demoMode && userData.annotatedImage) {
       setAnnotatedImage(userData.annotatedImage);
       setShowAnnotatedModal(true);
     } else {
@@ -1819,7 +1975,10 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       return;
     }
 
-    console.log("identifyPart: Starting AI identification for", (selectedObject as any).userData?.name);
+    console.log(
+      "identifyPart: Starting AI identification for",
+      (selectedObject as any).userData?.name
+    );
 
     // Check cache first
     const userData = (selectedObject as any).userData;
@@ -1839,9 +1998,15 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       if (composerRef.current) composerRef.current.render();
       else rendererRef.current.render(sceneRef.current, cameraRef.current);
 
-      const screenshot = rendererRef.current.domElement.toDataURL("image/jpeg", 0.8);
+      const screenshot = rendererRef.current.domElement.toDataURL(
+        "image/jpeg",
+        0.8
+      );
 
-      console.log("identifyPart: Screenshot captured, size:", screenshot.length);
+      console.log(
+        "identifyPart: Screenshot captured, size:",
+        screenshot.length
+      );
 
       // 2. Gather Mesh Data
       const mesh = selectedObject as THREE.Mesh;
@@ -1926,7 +2091,8 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       setInspectorData((prev) => ({
         ...prev,
         name: (selectedObject as any).userData?.name || "Unknown Part",
-        description: "AI identification failed. Please try again or check your API configuration.",
+        description:
+          "AI identification failed. Please try again or check your API configuration.",
         type: "Unknown",
       }));
     } finally {
@@ -1963,7 +2129,9 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
           <div className="flex items-center gap-2 pointer-events-auto">
             {/* OBJ Stick Controls */}
             <div className="bg-[#E5E6DA]/90 border border-[#1D1E15] rounded-lg px-2 py-1.5 flex items-center gap-1.5 backdrop-blur-md">
-              <span className="text-[10px] font-bold text-[#1D1E15] uppercase">OBJ</span>
+              <span className="text-[10px] font-bold text-[#1D1E15] uppercase">
+                OBJ
+              </span>
               {!objConnected ? (
                 <button
                   onClick={handleObjConnect}
@@ -1979,7 +2147,9 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
                   >
                     Disconnect
                   </button>
-                  <span className="text-[10px] text-[#1D1E15] font-mono">{objDeviceName}</span>
+                  <span className="text-[10px] text-[#1D1E15] font-mono">
+                    {objDeviceName}
+                  </span>
                   <button
                     onClick={handleObjZero}
                     className="px-2 py-1 bg-[#1D1E15] text-[#E5E6DA] text-[10px] rounded font-bold hover:bg-[#DF6C42] transition-colors uppercase cursor-pointer"
@@ -1998,7 +2168,9 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
 
             {/* CAM Stick Controls */}
             <div className="bg-[#E5E6DA]/90 border border-[#1D1E15] rounded-lg px-2 py-1.5 flex items-center gap-1.5 backdrop-blur-md">
-              <span className="text-[10px] font-bold text-[#1D1E15] uppercase">CAM</span>
+              <span className="text-[10px] font-bold text-[#1D1E15] uppercase">
+                CAM
+              </span>
               {!camConnected ? (
                 <button
                   onClick={handleCamConnect}
@@ -2014,7 +2186,9 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
                   >
                     Disconnect
                   </button>
-                  <span className="text-[10px] text-[#1D1E15] font-mono">{camDeviceName}</span>
+                  <span className="text-[10px] text-[#1D1E15] font-mono">
+                    {camDeviceName}
+                  </span>
                   <button
                     onClick={handleCamZero}
                     className="px-2 py-1 bg-[#1D1E15] text-[#E5E6DA] text-[10px] rounded font-bold hover:bg-[#DF6C42] transition-colors uppercase cursor-pointer"
@@ -2125,34 +2299,59 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
           </div>
         </div>
 
-        {/* Generate Prompt Bar */}
+        {/* Generate Prompt Bar / Demo Model Selector */}
         <div className="absolute bottom-0 left-0 w-full z-10 p-4 pointer-events-none">
           <div className="max-w-2xl mx-auto pointer-events-auto">
-            <div className="bg-[#E5E6DA]/80 border border-[#1D1E15] backdrop-blur-md p-1.5 flex gap-2 items-center shadow-lg">
-              <input
-                id="prompt-input"
-                type="text"
-                placeholder="Generate procedural model"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === "Enter") {
-                    generateModel(prompt);
-                  }
-                }}
-                className="flex-1 bg-transparent border-none outline-none text-[#1D1E15] placeholder-[#1D1E15]/40 text-[10px] font-mono px-3"
-              />
-              <button
-                onClick={() => generateModel(prompt)}
-                disabled={!prompt.trim() || loading}
-                className="px-4 py-2 bg-[#1D1E15] text-[#E5E6DA] text-[10px] font-bold hover:bg-[#DF6C42] transition-colors flex-shrink-0 uppercase tracking-wide cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Generate
-              </button>
-            </div>
+            {demoMode ? (
+              <div className="bg-[#E5E6DA]/80 border border-[#1D1E15] backdrop-blur-md p-1.5 flex gap-2 items-center shadow-lg">
+                <select
+                  id="demo-model-selector"
+                  value={selectedDemoModelId || ""}
+                  onChange={(e) => {
+                    const modelId = e.target.value;
+                    if (modelId) {
+                      loadDemoModel(modelId);
+                    }
+                  }}
+                  className="flex-1 bg-transparent border-none outline-none text-[#1D1E15] text-[10px] font-mono px-3 py-2 cursor-pointer"
+                >
+                  <option value="">Select a demo model...</option>
+                  {demoModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name} - {model.description}
+                    </option>
+                  ))}
+                </select>
+                <div className="px-3 py-2 bg-[#DF6C42]/20 border border-[#DF6C42] text-[#DF6C42] text-[10px] font-bold uppercase tracking-wide">
+                  Demo Mode
+                </div>
+              </div>
+            ) : (
+              <div className="bg-[#E5E6DA]/80 border border-[#1D1E15] backdrop-blur-md p-1.5 flex gap-2 items-center shadow-lg">
+                <input
+                  id="prompt-input"
+                  type="text"
+                  placeholder="Generate procedural model"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === "Enter") {
+                      generateModel(prompt);
+                    }
+                  }}
+                  className="flex-1 bg-transparent border-none outline-none text-[#1D1E15] placeholder-[#1D1E15]/40 text-[10px] font-mono px-3"
+                />
+                <button
+                  onClick={() => generateModel(prompt)}
+                  disabled={!prompt.trim() || loading}
+                  className="px-4 py-2 bg-[#1D1E15] text-[#E5E6DA] text-[10px] font-bold hover:bg-[#DF6C42] transition-colors flex-shrink-0 uppercase tracking-wide cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Generate
+                </button>
+              </div>
+            )}
           </div>
         </div>
-
 
         {/* Inspector Panel */}
         {showInspector && (
@@ -2177,32 +2376,71 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
                 <p className="text-[10px] text-[#1D1E15] leading-relaxed break-words">
                   {inspectorData.description}
                 </p>
-                <button
-                  onClick={identifyPart}
-                  disabled={isIdentifying}
-                  className="mt-3 w-full px-3 py-2 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] text-[10px] font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors uppercase tracking-wide flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isIdentifying ? (
-                    <>
-                      <div className="w-2 h-2 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                      Identifying...
-                    </>
-                  ) : (
-                    <>
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-                      </svg>
-                      Identify with AI
-                    </>
-                  )}
-                </button>
+                {!demoMode && (
+                  <button
+                    onClick={identifyPart}
+                    disabled={isIdentifying}
+                    className="mt-3 w-full px-3 py-2 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] text-[10px] font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors uppercase tracking-wide flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isIdentifying ? (
+                      <>
+                        <div className="w-2 h-2 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        Identifying...
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                        </svg>
+                        Identify with AI
+                      </>
+                    )}
+                  </button>
+                )}
+                {demoMode && (
+                  <button
+                    onClick={() => {
+                      // Get the first annotation from the current demo model
+                      const currentModel = demoModels.find(
+                        (m) => m.id === currentDemoModelRef.current
+                      );
+                      if (
+                        currentModel &&
+                        currentModel.annotatedParts.length > 0
+                      ) {
+                        const annotation = currentModel.annotatedParts[0];
+                        setAnnotatedImage(annotation.annotationImage);
+                        setInspectorData((prev) => ({
+                          ...prev,
+                          name: annotation.partName,
+                          description: annotation.description,
+                          type: annotation.category,
+                        }));
+                        setShowAnnotatedModal(true);
+                      }
+                    }}
+                    className="mt-3 w-full px-3 py-2 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] text-[10px] font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors uppercase tracking-wide flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                    </svg>
+                    View Annotation Preview
+                  </button>
+                )}
               </div>
               {showSplitSection && (
                 <div className="mt-2 p-3 bg-[#1D1E15]/5 border border-[#1D1E15]/10 rounded-xl">
@@ -2365,7 +2603,9 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         <AnimatePresence>
           {showInferenceLoader && (
             <AIInferenceLoader
-              objectName={(selectedObject as any)?.userData?.name || "Selected Object"}
+              objectName={
+                (selectedObject as any)?.userData?.name || "Selected Object"
+              }
               shouldClose={inferenceLoaderReady}
               onFinished={() => setShowInferenceLoader(false)}
               scene={sceneRef.current}

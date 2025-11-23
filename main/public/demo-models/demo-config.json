@@ -1,0 +1,49 @@
+{
+  "models": [
+    {
+      "id": "demo-1",
+      "name": "Brain Model",
+      "description": "3D brain anatomy model with detailed structures",
+      "modelUrl": "/demo-models/models/brain.glb",
+      "annotatedParts": [
+        {
+          "partName": "Cerebrum",
+          "meshName": ["Cerebrum", "cerebrum", "cerebral cortex"],
+          "annotationImage": "/demo-models/annotations/cerebrum-annotated.png",
+          "description": "The cerebrum is the largest and most superficial part of the brain, responsible for higher-level functions such as thinking, feeling, and movement.",
+          "category": "anatomical"
+        }
+      ]
+    },
+    {
+      "id": "demo-3",
+      "name": "Drone Model",
+      "description": "3D drone assembly model",
+      "modelUrl": "/demo-models/models/drone.glb",
+      "annotatedParts": [
+        {
+          "partName": "Propeller",
+          "meshName": ["Propeller", "propeller", "PROPELLER"],
+          "annotationImage": "/demo-models/annotations/drone-propeller-annotated.jpeg",
+          "description": "A rapidly rotating airfoil that generates thrust by pushing air downwards, providing lift for the drone.",
+          "category": "technical"
+        }
+      ]
+    },
+    {
+      "id": "demo-4",
+      "name": "Porsche Model",
+      "description": "Detailed Porsche gt3 model",
+      "modelUrl": "/demo-models/models/porsche.glb",
+      "annotatedParts": [
+        {
+          "partName": "Front Bumper",
+          "meshName": ["Front_Bumper", "FrontBumper", "front_bumper"],
+          "annotationImage": "/demo-models/annotations/front-bumper-annotated.png",
+          "description": "Located at the front of the vehicle, the bumper absorbs impact in minor collisions and often includes air intakes for cooling and aerodynamic elements like a splitter to improve downforce.",
+          "category": "anatomical"
+        }
+      ]
+    }
+  ]
+}
