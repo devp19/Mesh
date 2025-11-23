@@ -85,7 +85,7 @@ export default function Home() {
              </p>
              
              <div className="flex items-center gap-4 pt-2">
-               <button className="px-6 py-3 border border-[#1D1E15] text-[10px] uppercase font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors">
+               <button className="px-6 py-3 border border-[#1D1E15] text-[10px] uppercase font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors cursor-pointer">
                  Read Documentation
                </button>
                <Link

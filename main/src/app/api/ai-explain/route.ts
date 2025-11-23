@@ -149,7 +149,7 @@ Provide your analysis in this JSON format:
     }
 
     // Second, generate the annotated image using the exact prompt
-    const imagePrompt = `Turn the input photo into an annotated photo infographic. Keep the original image. Overlay clean white 'modern wireframe mesh' lines, arrows, labels, and small diagrams highlighting the key parts and relationships. Add a short boxed title at the top. Minimal, high-contrast, modern font-mono style. Only annotate the selected part of the brain in purple.`;
+    const imagePrompt = `Turn the input photo into an annotated photo infographic. Keep the original image. Overlay clean white 'modern wireframe mesh' lines, arrows, labels, and small diagrams highlighting the key parts and relationships. Add a short boxed title at the top. Minimal, high-contrast, modern font-mono style. Only annotate the selected part in purple.`;
 
     console.log("Generating annotated image from OpenRouter...");
 
