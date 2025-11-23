@@ -43,7 +43,6 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   const [isIsolating, setIsIsolating] = useState(false);
   const [isIdentifying, setIsIdentifying] = useState(false);
   const [aiIdentifyActive, setAiIdentifyActive] = useState(false); // Track if AI identify modal is showing
-  const [showInspector, setShowInspector] = useState(false);
   const [generateStarted, setGenerateStarted] = useState(false);
   const [inspectorData, setInspectorData] = useState({
     name: "",
@@ -60,10 +59,14 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   const [modelReady, setModelReady] = useState(false);
   const [animationFinished, setAnimationFinished] = useState(false);
   const [showAnnotatedModal, setShowAnnotatedModal] = useState(false);
+  const showAnnotatedModalRef = useRef(false);
+  useEffect(() => { showAnnotatedModalRef.current = showAnnotatedModal; }, [showAnnotatedModal]);
   const [annotatedImage, setAnnotatedImage] = useState<string | null>(null);
   const [showInferenceLoader, setShowInferenceLoader] = useState(false);
   const showInferenceLoaderRef = useRef(false);
   useEffect(() => { showInferenceLoaderRef.current = showInferenceLoader; }, [showInferenceLoader]);
+  const aiIdentifyActiveRef = useRef(false);
+  useEffect(() => { aiIdentifyActiveRef.current = aiIdentifyActive; }, [aiIdentifyActive]);
 
   const [inferenceLoaderReady, setInferenceLoaderReady] = useState(false);
   const [objConnected, setObjConnected] = useState(false);
@@ -89,6 +92,9 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   const animationFrameRef = useRef<number | null>(null);
   const isIsolatingRef = useRef(false);
   const selectedObjectRef = useRef<THREE.Object3D | null>(null);
+  // Store AI annotations mapped by object UUID to persist session knowledge correctly
+  // Key: Object UUID, Value: { annotatedImage: string, name: string, description: string, type: string }
+  const annotationsCacheRef = useRef<Record<string, any>>({});
   const splitMeshLastTimeRef = useRef<number>(0); // Fix TypeScript errors
   const viewModeRef = useRef<ViewMode>("holo");
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -323,58 +329,57 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     if (Math.abs(qx - 1.0) < 0.01 && Math.abs(qy - 1.0) < 0.01 && 
         Math.abs(qz - 1.0) < 0.01 && Math.abs(qw - 0.0) < 0.01) {
       console.log("AI identify trigger received from OBJ stick", { qx, qy, qz, qw });
-      console.log("Current selectedObject:", selectedObject ? selectedObject.name : "none");
-      console.log("AI identify modal active:", aiIdentifyActive);
+      console.log("Current selectedObject (ref):", selectedObjectRef.current ? selectedObjectRef.current.name : "none");
+      console.log("AI identify modal active (state):", aiIdentifyActive);
+      console.log("AI identify modal active (ref):", aiIdentifyActiveRef.current);
+      console.log("Annotated modal showing (state):", showAnnotatedModal);
+      console.log("Annotated modal showing (ref):", showAnnotatedModalRef.current);
       
-      // If AI identify modal is showing, close it on second press
-      if (aiIdentifyActive) {
-        console.log("AI identify modal active - closing modal");
+      // If annotated modal is showing, close it on second press (but keep inspector open)
+      // Use refs for synchronous check since state updates are async
+      if (aiIdentifyActiveRef.current || showAnnotatedModalRef.current) {
+        console.log("AI identify modal active - closing annotated modal");
         setAiIdentifyActive(false);
-        setShowInspector(false);
         setShowAnnotatedModal(false);
         setAnnotatedImage(null);
+        setIsIdentifying(false);
+        setShowInferenceLoader(false);
         movementPausedRef.current = false;
         return;
       }
       
-      // Auto-select first available object if none is selected
-      if (!selectedObject && sceneRef.current) {
-        console.log("No object selected, searching for first available mesh...");
-        let foundObject = false;
-        let totalObjects = 0;
-        let meshObjects = 0;
+      // Auto-select object: prefer object in center of view, fall back to first available
+      // Use ref for selectedObject to avoid stale closure issues in event listener
+      if (!selectedObjectRef.current && sceneRef.current && cameraRef.current && raycasterRef.current) {
+        console.log("No object selected (checked ref), performing center-screen raycast...");
         
+        // 1. Raycast from center of screen (0, 0 in normalized device coordinates)
+        raycasterRef.current.setFromCamera(new THREE.Vector2(0, 0), cameraRef.current);
+        
+        // Filter meshes that are visible and part of the model
+        const meshes: THREE.Mesh[] = [];
         sceneRef.current.traverse((child) => {
-          totalObjects++;
-          if ((child as THREE.Mesh).isMesh) {
-            meshObjects++;
-            // Less strict requirements - any mesh with userData or name
-            if (!selectedObject && !foundObject) {
-              const userData = (child as any).userData;
-              const hasName = userData?.name || child.name;
-              
-              if (hasName || userData) {
-                console.log("Auto-selecting object for AI identify:", {
-                  name: hasName || "unnamed",
-                  userData: !!userData,
-                  meshType: (child as THREE.Mesh).geometry?.type || "unknown"
-                });
-                setSelectedObject(child);
-                selectedObjectRef.current = child;
-                foundObject = true;
-              }
-            }
+          if ((child as THREE.Mesh).isMesh && child.visible) {
+            meshes.push(child as THREE.Mesh);
           }
         });
         
-        console.log(`Scene scan: ${totalObjects} total objects, ${meshObjects} meshes, found: ${foundObject}`);
+        const intersects = raycasterRef.current.intersectObjects(meshes, false);
         
-        if (!foundObject) {
-          console.error("No suitable mesh objects found in scene for AI identify");
-          // Try to select the first mesh anyway as a fallback
+        if (intersects.length > 0) {
+          // Pick the closest visible mesh
+          const hit = intersects[0];
+          console.log("Raycast hit object:", hit.object.name || "unnamed", "distance:", hit.distance);
+          setSelectedObject(hit.object);
+          selectedObjectRef.current = hit.object;
+        } else {
+          // Fallback: if nothing in center, scan for first available mesh (existing logic)
+          console.log("Raycast found nothing, searching for first available mesh...");
+          let foundObject = false;
+          
           sceneRef.current.traverse((child) => {
-            if ((child as THREE.Mesh).isMesh && !selectedObject) {
-              console.log("Fallback: selecting first mesh without name/userData");
+            if ((child as THREE.Mesh).isMesh && !foundObject) {
+              console.log("Fallback auto-select:", child.name || "unnamed");
               setSelectedObject(child);
               selectedObjectRef.current = child;
               foundObject = true;
@@ -383,13 +388,13 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         }
       }
       
-      // Verify we have an object before proceeding
-      if (!selectedObject) {
+      // Verify we have an object before proceeding (check ref since state update is async)
+      if (!selectedObjectRef.current) {
         console.error("Still no selected object after auto-selection attempt");
         return;
       }
       
-      console.log("Calling identifyPart() with object:", (selectedObject as any).userData?.name || selectedObject.name || "unnamed");
+      console.log("Calling identifyPart() with object:", (selectedObjectRef.current as any).userData?.name || selectedObjectRef.current.name || "unnamed");
       
       // Mark AI identify as active and call the function
       setAiIdentifyActive(true);
@@ -1062,11 +1067,37 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
 
     const loader = new GLTFLoader();
 
-    // Clear existing models
-    generatedObjectsRef.current.forEach((obj) => sceneRef.current!.remove(obj));
+    // Clear existing models and their cached annotation data
+    generatedObjectsRef.current.forEach((obj) => {
+      // Clear annotation data from all meshes in the object before removing
+      obj.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh && (child as any).userData) {
+          // Clear cached annotation data (this ensures old annotations don't persist)
+          delete (child as any).userData.annotatedImage;
+        }
+      });
+      sceneRef.current!.remove(obj);
+    });
     generatedObjectsRef.current = [];
     explodedGroupsRef.current.clear();
     resetView();
+
+    // Clear all annotation state and cached data when loading a new model
+    console.log("Clearing all annotation state for new model");
+    annotationsCacheRef.current = {}; // Clear central annotation cache
+    setAiIdentifyActive(false);
+    setShowAnnotatedModal(false);
+    setAnnotatedImage(null);
+    setShowInspector(false);
+    setIsIdentifying(false);
+    setShowInferenceLoader(false);
+    setInspectorData({
+      name: "",
+      description: "",
+      type: "",
+    });
+    setSelectedObject(null);
+    selectedObjectRef.current = null;
 
     // Show placeholder when no models
     if (placeholderRef.current) {
@@ -1106,11 +1137,14 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
 
           // Apply new material
           mesh.material = mats.solid; // Default to solid for now
+          // Create fresh userData without any cached annotations from previous models
           (mesh as any).userData = {
             mats,
             name: mesh.name || `Part ${meshes.length}`,
             description: "Imported Geometry",
             type: "Imported",
+            // Explicitly ensure no cached annotation data from previous models
+            annotatedImage: undefined,
           };
           mesh.castShadow = false;
           mesh.receiveShadow = false;
@@ -1804,14 +1838,18 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   };
 
   const identifyPart = async () => {
+    // Use ref as fallback if state hasn't updated yet (e.g., after auto-selection)
+    const currentObject = selectedObject || selectedObjectRef.current;
+    
     if (
-      !selectedObject ||
+      !currentObject ||
       !rendererRef.current ||
       !sceneRef.current ||
       !cameraRef.current
     ) {
       console.error("identifyPart: Missing required references", {
         selectedObject: !!selectedObject,
+        selectedObjectRef: !!selectedObjectRef.current,
         renderer: !!rendererRef.current,
         scene: !!sceneRef.current,
         camera: !!cameraRef.current,
@@ -1819,16 +1857,41 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       return;
     }
 
-    console.log("identifyPart: Starting AI identification for", (selectedObject as any).userData?.name);
+    const objectName = (currentObject as any).userData?.name || currentObject.name || "Unknown";
+    console.log("identifyPart: Starting AI identification for", objectName);
+    console.log("identifyPart: Object reference:", currentObject);
+    console.log("identifyPart: Object UUID:", currentObject.uuid);
 
-    // Check cache first
-    const userData = (selectedObject as any).userData;
-    if (userData && userData.annotatedImage) {
-      console.log("identifyPart: Using cached result");
-      setAnnotatedImage(userData.annotatedImage);
-      setShowAnnotatedModal(true);
-      return;
+    // Verify object is still in the current scene (not from a previous model)
+    let objectInScene = false;
+    if (sceneRef.current) {
+      sceneRef.current.traverse((child) => {
+        if (child === currentObject || child.uuid === currentObject.uuid) {
+          objectInScene = true;
+        }
+      });
     }
+    console.log("identifyPart: Object is in current scene:", objectInScene);
+    
+    if (!objectInScene) {
+      console.error("identifyPart: Object is not in current scene - may be from old model, skipping cache check");
+    } else {
+      // Check central cache using Object UUID
+      // This is more reliable than userData which might persist or get confused
+      const cachedData = annotationsCacheRef.current[currentObject.uuid];
+      console.log("identifyPart: Checking central cache for UUID:", currentObject.uuid);
+      console.log("identifyPart: Cached data exists:", !!cachedData);
+      
+      if (cachedData && cachedData.annotatedImage) {
+        console.log("identifyPart: Using cached result from central store for", objectName);
+        setAnnotatedImage(cachedData.annotatedImage);
+        setShowAnnotatedModal(true);
+        setAiIdentifyActive(true); // Mark as active so button can close it
+        return;
+      }
+    }
+    
+    console.log("identifyPart: No cache found or object not in scene - will run AI identification for", objectName);
 
     setIsIdentifying(true);
     setShowInferenceLoader(true);
@@ -1844,7 +1907,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       console.log("identifyPart: Screenshot captured, size:", screenshot.length);
 
       // 2. Gather Mesh Data
-      const mesh = selectedObject as THREE.Mesh;
+      const mesh = currentObject as THREE.Mesh;
       const geometry = mesh.geometry;
       if (!geometry.boundingBox) geometry.computeBoundingBox();
       const box = geometry.boundingBox!;
@@ -1903,15 +1966,29 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         annotatedImage: data.annotatedImage || null,
       }));
 
-      // 5. Cache data in userData
-      if (selectedObject) {
-        (selectedObject as any).userData = {
-          ...(selectedObject as any).userData,
+      // 5. Cache data in central store
+      if (currentObject) {
+        const objectName = (currentObject as any).userData?.name || currentObject.name || "Unknown";
+        console.log("identifyPart: Caching annotation data to central store for UUID:", currentObject.uuid);
+        
+        annotationsCacheRef.current[currentObject.uuid] = {
           name: data.name,
           description: data.description,
           type: data.category,
           annotatedImage: data.annotatedImage || null,
         };
+        
+        // Also update userData for fallback/inspector compatibility
+        (currentObject as any).userData = {
+          ...(currentObject as any).userData,
+          name: data.name,
+          description: data.description,
+          type: data.category,
+          annotatedImage: data.annotatedImage || null,
+        };
+        console.log("identifyPart: Cache saved - annotatedImage length:", data.annotatedImage?.length || 0);
+      } else {
+        console.error("identifyPart: Cannot cache - currentObject is null");
       }
 
       // 6. Show annotated image if available
@@ -1925,7 +2002,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       // Fallback: Show basic info without AI
       setInspectorData((prev) => ({
         ...prev,
-        name: (selectedObject as any).userData?.name || "Unknown Part",
+        name: (currentObject as any).userData?.name || "Unknown Part",
         description: "AI identification failed. Please try again or check your API configuration.",
         type: "Unknown",
       }));
