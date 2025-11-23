@@ -16,7 +16,7 @@ export default function Home() {
           {/* Scaled down from 179px */}
           <div className="w-[134px] h-full flex items-center justify-center bg-[#E5E6DA] shrink-0">
             <div className="w-10 h-10 flex items-center justify-center">
-              <img src="/logo.png" alt="VisionView Logo" className="w-6 h-6 object-contain invert" />
+              <img src="/logo.png" alt="Mesh Logo" className="w-6 h-6 object-contain invert" />
             </div>
           </div>
           
@@ -50,7 +50,7 @@ export default function Home() {
         </div>
         
         <div className="flex items-center gap-4 px-6">
-          <div className="text-[10px] uppercase tracking-widest opacity-50">VisionView</div>
+          <div className="text-[10px] uppercase tracking-widest opacity-50">Mesh</div>
           <Link
             href="/dashboard"
             className="px-5 py-1.5 bg-[#DF6C42] text-[#E5E6DA] text-[10px] uppercase font-bold hover:bg-[#1D1E15] transition-colors"
@@ -81,7 +81,7 @@ export default function Home() {
           
            {/* Hero Section */}
            <div className="pl-10 flex flex-col justify-center gap-6 flex-1">
-           <img src="/logo.png" alt="VisionView Logo" className="w-12 h-12 object-contain invert" />
+           <img src="/logo.png" alt="Mesh Logo" className="w-12 h-12 object-contain invert" />
 
              <div className="inline-flex items-center gap-2 px-2 py-0.5 border border-[#1D1E15] text-[10px] uppercase tracking-wider w-fit">
               
@@ -747,8 +747,8 @@ export default function Home() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8 border-b border-[#1D1E15] pb-8 mb-6">
                 <div>
                   <div className="flex items-center gap-2 mb-4">
-                    <img src="/logo.png" alt="VisionView Logo" className="w-6 h-6 object-contain invert" />
-                    <span className="text-sm font-medium">VisionView</span>
+                    <img src="/logo.png" alt="Mesh Logo" className="w-6 h-6 object-contain invert" />
+                    <span className="text-sm font-medium">Mesh</span>
                   </div>
                   <p className="text-xs opacity-60 leading-relaxed">
                     The coordination layer for geospatial data. Blazing fast 3D model processing and visualization.
@@ -799,7 +799,7 @@ export default function Home() {
               </div>
               
               <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-[10px] uppercase opacity-50">
-                <div>© 2025 VisionView. Built by Fenil Shah, Dev Patel, Kush Patel.</div>
+                <div>© 2025 Mesh. Built by Fenil Shah, Dev Patel, Kush Patel.</div>
                 <div className="flex items-center gap-4">
                   <span>v.2.0.4</span>
                   <span className="opacity-30">/</span>

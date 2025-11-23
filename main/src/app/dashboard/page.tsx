@@ -23,7 +23,7 @@ export default function DashboardPage() {
           {/* Logo Box */}
           <Link href="/" className="w-[48px] h-full flex items-center justify-center bg-[#E5E6DA] shrink-0 border-r border-[#1D1E15] hover:bg-[#1D1E15] group transition-colors">
              <div className="w-6 h-6 flex items-center justify-center">
-               <img src="/logo.png" alt="VisionView Logo" className="w-4 h-4 object-contain invert group-hover:invert-0 transition-all" />
+               <img src="/logo.png" alt="Mesh Logo" className="w-4 h-4 object-contain invert group-hover:invert-0 transition-all" />
              </div>
           </Link>
           
