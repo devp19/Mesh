@@ -34,7 +34,7 @@ interface ModelViewerProps {
 export default function ModelViewer({ onClose }: ModelViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("holo");
-  const [prompt, setPrompt] = useState("Brain");
+  const [prompt, setPrompt] = useState("");
   const [isExploded, setIsExploded] = useState(false);
   const [explosionDistance, setExplosionDistance] = useState(1.0);
   const [selectedObject, setSelectedObject] = useState<THREE.Object3D | null>(
@@ -42,6 +42,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   );
   const [isIsolating, setIsIsolating] = useState(false);
   const [showInspector, setShowInspector] = useState(false);
+  const [generateStarted, setGenerateStarted] = useState(false);
   const [inspectorData, setInspectorData] = useState({
     name: "",
     description: "",
@@ -77,6 +78,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   const shadowPlaneRef = useRef<THREE.Mesh | null>(null);
   const generatedObjectsRef = useRef<THREE.Object3D[]>([]);
   const hoveredObjectRef = useRef<THREE.Object3D | null>(null);
+  const placeholderRef = useRef<THREE.Mesh | null>(null);
   const raycasterRef = useRef<THREE.Raycaster | null>(null);
   const mouseRef = useRef<THREE.Vector2>(new THREE.Vector2());
   const explodedGroupsRef = useRef<Map<THREE.Group, ExplodedGroupData>>(
@@ -496,10 +498,18 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     const raycaster = new THREE.Raycaster();
     raycasterRef.current = raycaster;
 
-    // Initial model
-    // generateModel is defined below, but available in useEffect due to closure scope if defined with var/function or const in outer scope?
-    // Actually const functions are not hoisted. BUT useEffect runs after render, so generateModel will be defined.
-    // setTimeout(() => generateModel('Brain'), 0);
+    // Placeholder spinning wireframe rounded cube
+    const roundedCubeGeometry = new THREE.BoxGeometry(2, 2, 2, 4, 4, 4);
+    const wireframeMaterial = new THREE.MeshBasicMaterial({
+      color: 0x1D1E15,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.6,
+    });
+    const placeholder = new THREE.Mesh(roundedCubeGeometry, wireframeMaterial);
+    placeholder.position.set(0, 0, 0);
+    scene.add(placeholder);
+    placeholderRef.current = placeholder;
 
     // Animation loop
     let lastT = performance.now();
@@ -568,6 +578,15 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
           controlsRef.current.enabled = true;
           controlsRef.current.update();
         }
+      }
+
+      // Rotate placeholder if no model is loaded
+      if (placeholderRef.current && generatedObjectsRef.current.length === 0) {
+        placeholderRef.current.rotation.x += dt * 0.001;
+        placeholderRef.current.rotation.y += dt * 0.0015;
+        placeholderRef.current.visible = true;
+      } else if (placeholderRef.current) {
+        placeholderRef.current.visible = false;
       }
 
       if (composerRef.current) composerRef.current.render();
@@ -752,6 +771,11 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     explodedGroupsRef.current.clear();
     resetView();
 
+    // Show placeholder when no models
+    if (placeholderRef.current) {
+      placeholderRef.current.visible = true;
+    }
+
     loader.load(
       url,
       (gltf) => {
@@ -823,6 +847,11 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         sceneRef.current!.add(flatGroup);
         generatedObjectsRef.current.push(flatGroup);
 
+        // Hide placeholder when model is loaded
+        if (placeholderRef.current) {
+          placeholderRef.current.visible = false;
+        }
+
         if (controlsRef.current) {
           controlsRef.current.reset();
         }
@@ -856,6 +885,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   const generateModel = async (prompt: string) => {
     if (!sceneRef.current || !prompt.trim()) return;
 
+    setGenerateStarted(true);
     setLoading(true);
 
     try {
@@ -935,6 +965,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
           (error instanceof Error ? error.message : "")
       );
       setLoading(false);
+      // Keep generateStarted true so the bar stays at bottom even on error
     }
   };
 
@@ -1606,7 +1637,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
               {!objConnected ? (
                 <button
                   onClick={handleObjConnect}
-                  className="px-2 py-1 bg-[#1f6feb] text-white text-[10px] rounded font-bold hover:bg-[#1a5fd0] transition-colors uppercase"
+                  className="px-2 py-1 bg-[#DF6C42] text-[#E5E6DA] text-[10px] rounded font-bold hover:bg-[#1D1E15] transition-colors uppercase cursor-pointer"
                 >
                   Connect
                 </button>
@@ -1614,20 +1645,20 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
                 <>
                   <button
                     onClick={handleObjDisconnect}
-                    className="px-2 py-1 bg-[#dc3545] text-white text-[10px] rounded font-bold hover:bg-[#c82333] transition-colors uppercase"
+                    className="px-2 py-1 bg-[#dc3545] text-white text-[10px] rounded font-bold hover:bg-[#c82333] transition-colors uppercase cursor-pointer"
                   >
                     Disconnect
                   </button>
                   <span className="text-[10px] text-[#1D1E15] font-mono">{objDeviceName}</span>
                   <button
                     onClick={handleObjZero}
-                    className="px-2 py-1 bg-[#1D1E15] text-[#E5E6DA] text-[10px] rounded font-bold hover:bg-[#DF6C42] transition-colors uppercase"
+                    className="px-2 py-1 bg-[#1D1E15] text-[#E5E6DA] text-[10px] rounded font-bold hover:bg-[#DF6C42] transition-colors uppercase cursor-pointer"
                   >
                     Zero
                   </button>
                   <button
                     onClick={handleResetTranslate}
-                    className="px-2 py-1 bg-[#1D1E15] text-[#E5E6DA] text-[10px] rounded font-bold hover:bg-[#DF6C42] transition-colors uppercase"
+                    className="px-2 py-1 bg-[#1D1E15] text-[#E5E6DA] text-[10px] rounded font-bold hover:bg-[#DF6C42] transition-colors uppercase cursor-pointer"
                   >
                     Reset
                   </button>
@@ -1641,7 +1672,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
               {!camConnected ? (
                 <button
                   onClick={handleCamConnect}
-                  className="px-2 py-1 bg-[#1f6feb] text-white text-[10px] rounded font-bold hover:bg-[#1a5fd0] transition-colors uppercase"
+                  className="px-2 py-1 bg-[#DF6C42] text-[#E5E6DA] text-[10px] rounded font-bold hover:bg-[#1D1E15] transition-colors uppercase cursor-pointer"
                 >
                   Connect
                 </button>
@@ -1649,20 +1680,20 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
                 <>
                   <button
                     onClick={handleCamDisconnect}
-                    className="px-2 py-1 bg-[#dc3545] text-white text-[10px] rounded font-bold hover:bg-[#c82333] transition-colors uppercase"
+                    className="px-2 py-1 bg-[#dc3545] text-white text-[10px] rounded font-bold hover:bg-[#c82333] transition-colors uppercase cursor-pointer"
                   >
                     Disconnect
                   </button>
                   <span className="text-[10px] text-[#1D1E15] font-mono">{camDeviceName}</span>
                   <button
                     onClick={handleCamZero}
-                    className="px-2 py-1 bg-[#1D1E15] text-[#E5E6DA] text-[10px] rounded font-bold hover:bg-[#DF6C42] transition-colors uppercase"
+                    className="px-2 py-1 bg-[#1D1E15] text-[#E5E6DA] text-[10px] rounded font-bold hover:bg-[#DF6C42] transition-colors uppercase cursor-pointer"
                   >
                     Zero
                   </button>
                   <button
                     onClick={handleResetView}
-                    className="px-2 py-1 bg-[#1D1E15] text-[#E5E6DA] text-[10px] rounded font-bold hover:bg-[#DF6C42] transition-colors uppercase"
+                    className="px-2 py-1 bg-[#1D1E15] text-[#E5E6DA] text-[10px] rounded font-bold hover:bg-[#DF6C42] transition-colors uppercase cursor-pointer"
                   >
                     Reset
                   </button>
@@ -1675,7 +1706,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
             <div className="flex items-center gap-1 bg-[#1D1E15]/5 border border-[#1D1E15]/10 rounded-lg p-1">
               <button
                 onClick={() => setViewMode("holo")}
-                className={`px-2.5 py-1 text-[10px] rounded font-medium transition-colors ${
+                className={`px-2.5 py-1 text-[10px] rounded font-medium transition-colors cursor-pointer ${
                   viewMode === "holo"
                     ? "bg-[#1D1E15] text-[#E5E6DA]"
                     : "text-[#1D1E15]/60 hover:text-[#1D1E15]"
@@ -1685,7 +1716,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
               </button>
               <button
                 onClick={() => setViewMode("solid")}
-                className={`px-2.5 py-1 text-[10px] rounded font-medium transition-colors ${
+                className={`px-2.5 py-1 text-[10px] rounded font-medium transition-colors cursor-pointer ${
                   viewMode === "solid"
                     ? "bg-[#1D1E15] text-[#E5E6DA]"
                     : "text-[#1D1E15]/60 hover:text-[#1D1E15]"
@@ -1703,7 +1734,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
             />
             <label
               htmlFor="file-input"
-              className="px-3 py-1.5 bg-[#DF6C42] text-[#E5E6DA] rounded-lg text-[10px] font-bold hover:bg-[#1D1E15] transition-colors flex items-center gap-1.5 cursor-pointer uppercase tracking-wide"
+              className="px-3 py-1.5 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] text-[10px] font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex items-center gap-1.5 cursor-pointer uppercase tracking-wide"
             >
               <svg
                 width="12"
@@ -1719,50 +1750,27 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
               </svg>
               Upload
             </label>
-            {onClose && (
-              <button
-                onClick={onClose}
-                className="px-3 py-1.5 bg-[#1D1E15] text-[#E5E6DA] rounded-lg text-[10px] font-bold hover:bg-[#DF6C42] transition-colors uppercase tracking-wide"
+            <button
+              onClick={exportGLB}
+              className="px-3 py-1.5 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] text-[10px] font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex items-center gap-1.5 uppercase tracking-wide cursor-pointer"
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
               >
-                Close
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Bottom Prompt Bar */}
-        <div className="absolute bottom-0 left-0 w-full z-10 p-4 pointer-events-none">
-          <div className="max-w-2xl mx-auto pointer-events-auto">
-            <div className="bg-[#E5E6DA]/80 border border-[#1D1E15] backdrop-blur-md p-1.5 flex gap-2 items-center shadow-lg">
-              <input
-                id="prompt-input"
-                type="text"
-                placeholder="Generate procedural model (e.g., 'Brain')"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === "Enter") {
-                    generateModel(prompt);
-                  }
-                }}
-                className="flex-1 bg-transparent border-none outline-none text-[#1D1E15] placeholder-[#1D1E15]/40 text-[10px] font-mono px-3"
-              />
-              <button
-                onClick={() => generateModel(prompt)}
-                className="px-4 py-2 bg-[#1D1E15] text-[#E5E6DA] text-[10px] font-bold hover:bg-[#DF6C42] transition-colors flex-shrink-0 uppercase tracking-wide"
-              >
-                Generate
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="absolute bottom-20 right-4 z-10 flex flex-col gap-2">
-          {isIsolating && (
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              Export
+            </button>
             <button
               onClick={resetView}
-              className="px-3 py-1.5 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] rounded-lg text-[10px] font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex items-center gap-1.5 uppercase tracking-wide shadow-sm"
+              className="px-3 py-1.5 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] text-[10px] font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex items-center gap-1.5 uppercase tracking-wide"
             >
               <svg
                 width="12"
@@ -1776,26 +1784,45 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
               </svg>
               Reset
             </button>
-          )}
-          <button
-            onClick={exportGLB}
-            className="px-3 py-1.5 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] rounded-lg text-[10px] font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex items-center gap-1.5 uppercase tracking-wide shadow-sm"
-          >
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            Export
-          </button>
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="px-3 py-1.5 bg-[#1D1E15] text-[#E5E6DA] text-[10px] font-bold hover:bg-[#DF6C42] transition-colors uppercase tracking-wide cursor-pointer"
+              >
+                Close
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Generate Prompt Bar */}
+        <div className="absolute bottom-0 left-0 w-full z-10 p-4 pointer-events-none">
+          <div className="max-w-2xl mx-auto pointer-events-auto">
+            <div className="bg-[#E5E6DA]/80 border border-[#1D1E15] backdrop-blur-md p-1.5 flex gap-2 items-center shadow-lg">
+              <input
+                id="prompt-input"
+                type="text"
+                placeholder="Generate procedural model"
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === "Enter") {
+                    generateModel(prompt);
+                  }
+                }}
+                className="flex-1 bg-transparent border-none outline-none text-[#1D1E15] placeholder-[#1D1E15]/40 text-[10px] font-mono px-3"
+              />
+              <button
+                onClick={() => generateModel(prompt)}
+                disabled={!prompt.trim() || loading}
+                className="px-4 py-2 bg-[#1D1E15] text-[#E5E6DA] text-[10px] font-bold hover:bg-[#DF6C42] transition-colors flex-shrink-0 uppercase tracking-wide cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Generate
+              </button>
+            </div>
+          </div>
+        </div>
+
 
         {/* Inspector Panel */}
         {showInspector && (
@@ -1823,7 +1850,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
                 <button
                   onClick={identifyPart}
                   disabled={isIdentifying}
-                  className="mt-3 w-full px-3 py-2 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] text-[10px] font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors uppercase tracking-wide flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="mt-3 w-full px-3 py-2 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] text-[10px] font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors uppercase tracking-wide flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isIdentifying ? (
                     <>
@@ -1854,7 +1881,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
                   </div>
                   <button
                     onClick={handleSplitMesh}
-                    className="w-full px-3 py-2 bg-[#1D1E15] text-[#E5E6DA] text-[10px] font-bold flex items-center justify-center gap-1.5 mb-2 hover:bg-[#DF6C42] transition-colors uppercase tracking-wide"
+                    className="w-full px-3 py-2 bg-[#1D1E15] text-[#E5E6DA] text-[10px] font-bold flex items-center justify-center gap-1.5 mb-2 hover:bg-[#DF6C42] transition-colors uppercase tracking-wide cursor-pointer"
                   >
                     <svg
                       width="12"
@@ -1883,7 +1910,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
                           onClick={() => {
                             setIsExploded(!isExploded);
                           }}
-                          className={`px-2 py-1 text-[10px] font-bold uppercase border transition-colors ${
+                          className={`px-2 py-1 text-[10px] font-bold uppercase border transition-colors cursor-pointer ${
                             isExploded
                               ? "bg-[#DF6C42] text-[#E5E6DA] border-[#DF6C42]"
                               : "bg-transparent text-[#1D1E15] border-[#1D1E15] hover:bg-[#1D1E15] hover:text-[#E5E6DA]"
@@ -1962,7 +1989,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
               {/* Close button */}
               <button
                 onClick={() => setShowAnnotatedModal(false)}
-                className="absolute top-2 right-2 z-10 w-8 h-8 bg-[#1D1E15] text-[#E5E6DA] rounded-full flex items-center justify-center hover:bg-[#DF6C42] transition-colors"
+                className="absolute top-2 right-2 z-10 w-8 h-8 bg-[#1D1E15] text-[#E5E6DA] rounded-full flex items-center justify-center hover:bg-[#DF6C42] transition-colors cursor-pointer"
               >
                 <svg
                   width="16"
