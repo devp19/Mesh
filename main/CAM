@@ -1,0 +1,195 @@
+#include <M5StickCPlus2.h>
+#include <NimBLEDevice.h>
+#include <MadgwickAHRS.h>
+
+// ---- BLE UUIDs ----
+static const char* SVC_UUID = "12345678-1234-5678-1234-56789abcdef0";
+static const char* CHR_UUID = "12345678-1234-5678-1234-56789abcdef1";
+
+NimBLEServer*         bleServer = nullptr;
+NimBLECharacteristic* qChar     = nullptr;
+Madgwick              ahrs;
+
+struct QuatPacket { float qx, qy, qz, qw; }; // little-endian float32 x4
+QuatPacket qPkt{0,0,0,1};   // last-reported rotation
+
+// reference (zero) orientation for re-centering
+float qRef[4] = {0,0,0,1};
+
+// Gyro bias (deg/s) estimated at startup
+float gbx=0, gby=0, gbz=0;
+
+// Stream toggle
+bool streamEnabled = false;
+
+// Split mesh trigger packet
+QuatPacket splitPkt{3.0f, 3.0f, 3.0f, 0.0f}; // Special pattern for split mesh
+
+static inline void qConjugate(const float q[4], float out[4]) {
+  out[0] = -q[0]; out[1] = -q[1]; out[2] = -q[2]; out[3] = q[3];
+}
+static inline void qMul(const float a[4], const float b[4], float out[4]) {
+  out[3] = a[3]*b[3] - (a[0]*b[0] + a[1]*b[1] + a[2]*b[2]);               // w
+  out[0] = a[3]*b[0] + b[3]*a[0] + a[1]*b[2] - a[2]*b[1];                  // x
+  out[1] = a[3]*b[1] + b[3]*a[1] + a[2]*b[0] - a[0]*b[2];                  // y
+  out[2] = a[3]*b[2] + b[3]*a[2] + a[0]*b[1] - a[1]*b[0];                  // z
+}
+static inline void qNormalize(float q[4]) {
+  float n = sqrtf(q[0]*q[0]+q[1]*q[1]+q[2]*q[2]+q[3]*q[3]);
+  if (n > 0.0f) { q[0]/=n; q[1]/=n; q[2]/=n; q[3]/=n; }
+}
+
+void showStatus() {
+  StickCP2.Display.fillScreen(BLACK);
+  StickCP2.Display.setCursor(0, 0);
+  StickCP2.Display.println("CAM STICK (FAST)");
+  StickCP2.Display.println("A: Start/Stop");
+  StickCP2.Display.println("B: Split Mesh");
+  StickCP2.Display.printf("Streaming: %s\n", streamEnabled ? "ON" : "OFF");
+}
+
+void triggerSplitMesh() {
+  // Send special quaternion pattern to trigger split mesh
+  if (qChar && bleServer && bleServer->getConnectedCount() > 0) {
+    qChar->setValue((uint8_t*)&splitPkt, sizeof(splitPkt));
+    qChar->notify();
+    Serial.println("Split mesh trigger sent");
+  }
+  
+  // Visual feedback
+  StickCP2.Display.fillScreen(MAGENTA);
+  StickCP2.Display.setCursor(0,0);
+  StickCP2.Display.println("SPLIT MESH");
+  StickCP2.Display.println("TRIGGERED!");
+  delay(700);
+  showStatus();
+}
+
+void calibrateGyro() {
+  StickCP2.Display.fillScreen(BLACK);
+  StickCP2.Display.setCursor(0, 0);
+  StickCP2.Display.println("CAM STICK (CAL)");
+  StickCP2.Display.println("Keep still 1s...");
+  delay(50);
+  const int samples = 250; // ~1s at ~4ms
+  double sx=0, sy=0, sz=0;
+  for (int i=0; i<samples; ++i) {
+    StickCP2.Imu.update();
+    auto m = StickCP2.Imu.getImuData();
+    sx += m.gyro.x; sy += m.gyro.y; sz += m.gyro.z; // deg/s
+    delay(4);
+  }
+  gbx = sx / samples;
+  gby = sy / samples;
+  gbz = sz / samples;
+  StickCP2.Display.println("Gyro bias set");
+  delay(200);
+  showStatus();
+}
+
+void setup() {
+  auto cfg = M5.config();
+  StickCP2.begin(cfg);
+  StickCP2.Display.setRotation(1);
+  StickCP2.Display.setTextSize(2);
+  showStatus();
+  
+  if (!StickCP2.Imu.begin()) {
+    StickCP2.Display.println("IMU FAIL");
+  } else {
+    StickCP2.Display.println("IMU OK");
+  }
+  ahrs.begin(500.0f); // Increased to 500Hz for faster response
+
+  calibrateGyro();
+
+  // BLE init
+  NimBLEDevice::init("M5StickCPlus2-CAM");
+  NimBLEDevice::setDeviceName("M5StickCPlus2-CAM");
+  bleServer = NimBLEDevice::createServer();
+  auto svc = bleServer->createService(SVC_UUID);
+  qChar = svc->createCharacteristic(CHR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+  svc->start();
+
+  NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+  adv->addServiceUUID(SVC_UUID);
+  NimBLEAdvertisementData scanData; scanData.setName("M5StickCPlus2-CAM");
+  adv->setScanResponseData(scanData);
+  NimBLEAdvertisementData advData;  advData.setName("M5StickCPlus2-CAM");
+  adv->setAdvertisementData(advData);
+  adv->start();
+
+  StickCP2.Display.println("BLE ADV ON");
+}
+
+void loop() {
+  StickCP2.update();
+  StickCP2.Imu.update();
+
+  // Toggle streaming with A
+  if (StickCP2.BtnA.wasPressed()) {
+    streamEnabled = !streamEnabled;
+    showStatus();
+  }
+
+  // Auto re-advertise after disconnect
+  static bool wasConnected = false;
+  bool isConnected = (bleServer && bleServer->getConnectedCount() > 0);
+  if (!isConnected && wasConnected) {
+    NimBLEDevice::getAdvertising()->start();
+    StickCP2.Display.setCursor(0, 110);
+    StickCP2.Display.println("ADV RESTART");
+  }
+  wasConnected = isConnected;
+
+  // Read IMU
+  auto m = StickCP2.Imu.getImuData();
+
+  // Convert gyro to rad/s for Madgwick (remove biases)
+  const float DEG2RAD = 0.017453292519943295f;
+  float gx = (m.gyro.x - gbx) * DEG2RAD;
+  float gy = (m.gyro.y - gby) * DEG2RAD;
+  float gz = (m.gyro.z - gbz) * DEG2RAD;
+
+  // Update filter (IMU variant: gyro (rad/s) + accel (g))
+  ahrs.updateIMU(gx, gy, gz, m.accel.x, m.accel.y, m.accel.z);
+
+  // Euler -> quaternion (ZYX)
+  float roll  = ahrs.getRoll();   // deg
+  float pitch = ahrs.getPitch();  // deg
+  float yaw   = ahrs.getYaw();    // deg
+
+  float rx = roll  * DEG2RAD;
+  float ry = pitch * DEG2RAD;
+  float rz = yaw   * DEG2RAD;
+
+  float cr = cosf(rx * 0.5f), sr = sinf(rx * 0.5f);
+  float cp = cosf(ry * 0.5f), sp = sinf(ry * 0.5f);
+  float cy = cosf(rz * 0.5f), sy = sinf(rz * 0.5f);
+
+  float qw = cr*cp*cy + sr*sp*sy;
+  float qx = sr*cp*cy - cr*sp*sy;
+  float qy = cr*sp*cy + sr*cp*sy;
+  float qz = cr*cp*sy - sr*sp*cy;
+
+  float qCurr[4] = { qx, qy, qz, qw };
+
+  // Apply re-center offset: q_rel = qCurr * conj(qRef)
+  float qRefConj[4]; qConjugate(qRef, qRefConj);
+  float qRel[4];     qMul(qCurr, qRefConj, qRel);
+  qNormalize(qRel);
+
+  // STREAM WHEN ENABLED
+  if (streamEnabled && qChar) {
+    qPkt.qx = qRel[0]; qPkt.qy = qRel[1]; qPkt.qz = qRel[2]; qPkt.qw = qRel[3];
+    qChar->setValue((uint8_t*)&qPkt, sizeof(qPkt));
+    qChar->notify();
+  }
+
+  // Split mesh with B
+  if (StickCP2.BtnB.wasPressed()) {
+    triggerSplitMesh();
+  }
+
+  delay(1); // ~500 Hz for much faster response (was 2ms = 333Hz)
+}

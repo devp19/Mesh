@@ -1,0 +1,219 @@
+// M5StickCPlus2 OBJ firmware: button-only controller with robust re-advertise
+// Board: M5StickCPlus2
+// Libs: M5StickCPlus2, NimBLE-Arduino
+
+#include <M5StickCPlus2.h>
+#include <NimBLEDevice.h>
+#include <math.h>
+
+// ---- BLE UUIDs ----
+static const char* SVC_UUID = "12345678-1234-5678-1234-56789abcdef0";
+static const char* CHR_UUID = "12345678-1234-5678-1234-56789abcdef1";
+
+// ---- BLE handles ----
+NimBLEServer*         bleServer  = nullptr;
+NimBLEService*        bleService = nullptr;
+NimBLECharacteristic* qChar      = nullptr;
+NimBLEAdvertising*    adv        = nullptr;
+
+// ---- Packet ----
+struct QuatPacket { float qx, qy, qz, qw; };
+QuatPacket qPkt{0,0,0,1};
+
+// ---- State ----
+volatile bool needReAdvertise = false;
+bool advRunning = false;
+uint32_t lastAdvKickMs = 0;
+
+// Zoom click cycle: 0,1 = zoom in; 2,3 = zoom out
+int zoomClickCount = 0;
+
+// ---- UI ----
+void showHome(const char* extra = nullptr) {
+  StickCP2.Display.fillScreen(BLACK);
+  StickCP2.Display.setCursor(0,0);
+  StickCP2.Display.println("OBJ CONTROLLER");
+  StickCP2.Display.println("Button Mode");
+  const bool connected = (bleServer && bleServer->getConnectedCount() > 0);
+  StickCP2.Display.println(connected ? "Connected" : (advRunning ? "Advertising" : "Idle"));
+  StickCP2.Display.println("A: AI Identify");
+  StickCP2.Display.println("B: Zoom In/Out");
+  if (extra) { StickCP2.Display.println(extra); }
+}
+
+// ---- Advertising helpers ----
+void startAdvertising() {
+  if (!adv) adv = NimBLEDevice::getAdvertising();
+  NimBLEAdvertisementData nameData;
+  nameData.setName("M5StickCPlus2-OBJ-RP");
+  adv->setAdvertisementData(nameData);
+  adv->setScanResponseData(nameData);
+  adv->addServiceUUID(NimBLEUUID(SVC_UUID));
+  adv->start();
+  advRunning = true;
+  Serial.println("Advertising started");
+  showHome("BLE: Advertising");
+}
+
+// ---- Server callbacks (no 'override', both signatures supported) ----
+class MyServerCallbacks : public NimBLEServerCallbacks {
+public:
+  // Present in older NimBLE
+  void onConnect(NimBLEServer* pServer) {
+    advRunning = false; // advertising stops on connect
+    Serial.println("Device connected");
+    StickCP2.Display.fillScreen(GREEN);
+    StickCP2.Display.setCursor(0,0);
+    StickCP2.Display.println("CONNECTED!");
+    delay(600);
+    showHome();
+  }
+  // Present in some versions as an overload
+  void onConnect(NimBLEServer* pServer, ble_gap_conn_desc* /*desc*/) {
+    onConnect(pServer);
+  }
+
+  // Present across versions
+  void onDisconnect(NimBLEServer* pServer) {
+    Serial.println("Device disconnected; will re-advertise");
+    needReAdvertise = true;  // loop() will restart advertising
+    showHome("BLE: Will re-adv");
+  }
+  // Some versions add another overload; safe to omit. If you still get callback signature errors,
+  // you can add a similar 2-arg onDisconnect(...) that forwards to this one.
+};
+
+// ---- Actions ----
+void triggerAIIdentify() {
+  // Distinct pattern to signal AI Identify to the host app
+  QuatPacket aiPkt{1.0f, 1.0f, 1.0f, 0.0f};
+  if (bleServer && bleServer->getConnectedCount() > 0 && qChar) {
+    qChar->setValue((uint8_t*)&aiPkt, sizeof(aiPkt));
+    qChar->notify();
+  }
+  StickCP2.Display.fillScreen(RED);
+  StickCP2.Display.setCursor(0,0);
+  StickCP2.Display.println("AI IDENTIFY");
+  StickCP2.Display.println("TRIGGERED!");
+  delay(700);
+  showHome();
+}
+
+void triggerZoom() {
+  QuatPacket zoomPkt;
+  if (zoomClickCount < 2) {
+    // Zoom in
+    zoomPkt = {-1.0f, -1.0f, -1.0f, 0.0f};
+    StickCP2.Display.fillScreen(YELLOW);
+    StickCP2.Display.setCursor(0,0);
+    StickCP2.Display.println(zoomClickCount == 0 ? "ZOOM IN 1" : "ZOOM IN 2");
+  } else {
+    // Zoom out
+    zoomPkt = {-2.0f, -2.0f, -2.0f, 0.0f};
+    StickCP2.Display.fillScreen(CYAN);
+    StickCP2.Display.setCursor(0,0);
+    StickCP2.Display.println(zoomClickCount == 2 ? "ZOOM OUT 1" : "ZOOM OUT 2");
+  }
+
+  if (bleServer && bleServer->getConnectedCount() > 0 && qChar) {
+    qChar->setValue((uint8_t*)&zoomPkt, sizeof(zoomPkt));
+    qChar->notify();
+  }
+  delay(400);
+  zoomClickCount = (zoomClickCount + 1) % 4;
+  showHome();
+}
+
+// Long-press B (~2s) forces re-advertise (manual recovery)
+void handleLongPresses() {
+  static uint32_t bPressStart = 0;
+  static bool bWasHeld = false;
+
+  if (StickCP2.BtnB.isPressed()) {
+    if (bPressStart == 0) bPressStart = millis();
+    if (!bWasHeld && millis() - bPressStart > 2000) {
+      bWasHeld = true;
+      Serial.println("Long-press B: force re-advertise");
+      needReAdvertise = true;
+      showHome("Long-press: re-adv");
+    }
+  } else {
+    bPressStart = 0;
+    bWasHeld = false;
+  }
+}
+
+// ---- Setup / Loop ----
+void setup() {
+  auto cfg = M5.config();
+  StickCP2.begin(cfg);
+  StickCP2.Display.setRotation(1);
+  StickCP2.Display.setTextSize(2);
+  showHome("Booting...");
+
+  if (!StickCP2.Imu.begin()) {
+    StickCP2.Display.println("IMU FAIL");
+  } else {
+    StickCP2.Display.println("IMU OK");
+  }
+
+  NimBLEDevice::init("M5StickCPlus2-OBJ-RP");
+  NimBLEDevice::setDeviceName("M5StickCPlus2-OBJ-RP");
+  // Optional: boost TX power so the scanner finds it quicker
+  // NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+
+  bleServer  = NimBLEDevice::createServer();
+  bleServer->setCallbacks(new MyServerCallbacks());
+
+  bleService = bleServer->createService(SVC_UUID);
+  qChar = bleService->createCharacteristic(
+    CHR_UUID,
+    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
+  );
+  bleService->start();
+
+  adv = NimBLEDevice::getAdvertising();
+  startAdvertising();
+
+  delay(200);
+}
+
+void loop() {
+  StickCP2.update();
+  StickCP2.Imu.update();
+
+  // If disconnected and not advertising, kick advertising (debounced)
+  if (bleServer && bleServer->getConnectedCount() == 0 && !advRunning) {
+    if (millis() - lastAdvKickMs > 300) {
+      startAdvertising();
+      lastAdvKickMs = millis();
+    }
+  }
+
+  // Force re-adv requested (from callback or long-press)
+  if (needReAdvertise) {
+    if (adv) adv->stop();
+    delay(120);
+    startAdvertising();
+    needReAdvertise = false;
+  }
+
+  // Stream identity quaternion only when connected (keeps host link alive, no motion)
+  if (bleServer && bleServer->getConnectedCount() > 0 && qChar) {
+    qPkt.qx = 0.0f; qPkt.qy = 0.0f; qPkt.qz = 0.0f; qPkt.qw = 1.0f;
+    qChar->setValue((uint8_t*)&qPkt, sizeof(qPkt));
+    qChar->notify();
+  }
+
+  // Buttons
+  if (StickCP2.BtnA.wasPressed()) {
+    triggerAIIdentify();
+  }
+  if (StickCP2.BtnB.wasPressed()) {
+    triggerZoom();
+  }
+
+  handleLongPresses();
+
+  delay(5); // ~200 Hz loop
+}
