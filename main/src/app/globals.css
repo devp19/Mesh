@@ -116,6 +116,9 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    scroll-behavior: smooth;
+  }
   body {
     @apply bg-background text-foreground;
   }
@@ -131,12 +134,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 255, 135, 0.3);
+  background: rgba(223, 108, 66, 0.3);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 255, 135, 0.5);
+  background: rgba(223, 108, 66, 0.5);
 }
 
 /* Range slider styling */
@@ -150,7 +153,7 @@ input[type="range"]::-webkit-slider-thumb {
   appearance: none;
   width: 16px;
   height: 16px;
-  background: #00ff87;
+  background: #DF6C42;
   border-radius: 50%;
   cursor: pointer;
   border: 2px solid rgba(255, 255, 255, 0.2);
@@ -159,7 +162,7 @@ input[type="range"]::-webkit-slider-thumb {
 input[type="range"]::-moz-range-thumb {
   width: 16px;
   height: 16px;
-  background: #00ff87;
+  background: #DF6C42;
   border-radius: 50%;
   cursor: pointer;
   border: 2px solid rgba(255, 255, 255, 0.2);
