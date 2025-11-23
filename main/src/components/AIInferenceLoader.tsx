@@ -40,7 +40,7 @@ export default function AIInferenceLoader({
   const [progress, setProgress] = useState(0);
   const [currentScanningIndex, setCurrentScanningIndex] = useState(-1);
   
-  const originalMaterialsRef = useRef<Map<THREE.Mesh, THREE.Material>>(new Map());
+  const originalMaterialsRef = useRef<Map<THREE.Mesh, THREE.Material | THREE.Material[]>>(new Map());
   const scanningMaterialRef = useRef<THREE.MeshStandardMaterial | null>(null);
   const ghostMaterialRef = useRef<THREE.MeshStandardMaterial | null>(null);
 
@@ -314,20 +314,20 @@ export default function AIInferenceLoader({
           Actually, we want to block interaction with the underlying canvas.
           We can put a transparent div here.
       */}
-      <div className="absolute top-20 bottom-16 left-80 right-80 pointer-events-auto cursor-wait flex items-center justify-center">
-         {/* Reticle */}
-         <div className="w-64 h-64 border border-[#DF6C42]/20 relative opacity-50">
-            <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-[#DF6C42]" />
-            <div className="absolute top-0 right-0 w-2 h-2 border-t border-r border-[#DF6C42]" />
-            <div className="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-[#DF6C42]" />
-            <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-[#DF6C42]" />
+      <div className="absolute top-20 bottom-16 left-80 right-80 pointer-events-auto cursor-wait">
+         {/* Reticle - Full Size */}
+         <div className="w-full h-full border border-[#DF6C42]/20 relative opacity-50">
+            <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-[#DF6C42]" />
+            <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-[#DF6C42]" />
+            <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-[#DF6C42]" />
+            <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-[#DF6C42]" />
             
             {/* Scanning Line */}
             <motion.div 
-              className="absolute left-0 right-0 h-[1px] bg-[#DF6C42]/50"
+              className="absolute left-0 right-0 h-[2px] bg-[#DF6C42]/50 shadow-[0_0_15px_rgba(223,108,66,0.5)]"
               initial={{ top: 0 }}
               animate={{ top: "100%" }}
-              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+              transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
             />
          </div>
       </div>
