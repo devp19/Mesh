@@ -41,6 +41,8 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     null
   );
   const [isIsolating, setIsIsolating] = useState(false);
+  const [isIdentifying, setIsIdentifying] = useState(false);
+  const [aiIdentifyActive, setAiIdentifyActive] = useState(false); // Track if AI identify modal is showing
   const [showInspector, setShowInspector] = useState(false);
   const [generateStarted, setGenerateStarted] = useState(false);
   const [inspectorData, setInspectorData] = useState({
@@ -48,6 +50,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     description: "",
     type: "",
   });
+  const [showInspector, setShowInspector] = useState(false);
   const [annotationOverlay, setAnnotationOverlay] = useState<string | null>(
     null
   );
@@ -56,7 +59,6 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   const [loading, setLoading] = useState(false);
   const [modelReady, setModelReady] = useState(false);
   const [animationFinished, setAnimationFinished] = useState(false);
-  const [isIdentifying, setIsIdentifying] = useState(false);
   const [showAnnotatedModal, setShowAnnotatedModal] = useState(false);
   const [annotatedImage, setAnnotatedImage] = useState<string | null>(null);
   const [showInferenceLoader, setShowInferenceLoader] = useState(false);
@@ -87,6 +89,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   const animationFrameRef = useRef<number | null>(null);
   const isIsolatingRef = useRef(false);
   const selectedObjectRef = useRef<THREE.Object3D | null>(null);
+  const splitMeshLastTimeRef = useRef<number>(0); // Fix TypeScript errors
   const viewModeRef = useRef<ViewMode>("holo");
   const tooltipRef = useRef<HTMLDivElement>(null);
 
@@ -131,6 +134,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   const qAxisFixRef = useRef(new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0, 'XYZ')));
   const eObjRef = useRef(new THREE.Euler(0, 0, 0, "YXZ"));
   const eCamRef = useRef(new THREE.Euler(0, 0, 0, "YXZ"));
+  const movementPausedRef = useRef(false);
 
   useEffect(() => {
     isIsolatingRef.current = isIsolating;
@@ -315,21 +319,314 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     const qz = dv.getFloat32(8, true);
     const qw = dv.getFloat32(12, true);
 
+    // Check for AI identify trigger pattern {1.0, 1.0, 1.0, 0.0}
+    if (Math.abs(qx - 1.0) < 0.01 && Math.abs(qy - 1.0) < 0.01 && 
+        Math.abs(qz - 1.0) < 0.01 && Math.abs(qw - 0.0) < 0.01) {
+      console.log("AI identify trigger received from OBJ stick", { qx, qy, qz, qw });
+      console.log("Current selectedObject:", selectedObject ? selectedObject.name : "none");
+      console.log("AI identify modal active:", aiIdentifyActive);
+      
+      // If AI identify modal is showing, close it on second press
+      if (aiIdentifyActive) {
+        console.log("AI identify modal active - closing modal");
+        setAiIdentifyActive(false);
+        setShowInspector(false);
+        setShowAnnotatedModal(false);
+        setAnnotatedImage(null);
+        movementPausedRef.current = false;
+        return;
+      }
+      
+      // Auto-select first available object if none is selected
+      if (!selectedObject && sceneRef.current) {
+        console.log("No object selected, searching for first available mesh...");
+        let foundObject = false;
+        let totalObjects = 0;
+        let meshObjects = 0;
+        
+        sceneRef.current.traverse((child) => {
+          totalObjects++;
+          if ((child as THREE.Mesh).isMesh) {
+            meshObjects++;
+            // Less strict requirements - any mesh with userData or name
+            if (!selectedObject && !foundObject) {
+              const userData = (child as any).userData;
+              const hasName = userData?.name || child.name;
+              
+              if (hasName || userData) {
+                console.log("Auto-selecting object for AI identify:", {
+                  name: hasName || "unnamed",
+                  userData: !!userData,
+                  meshType: (child as THREE.Mesh).geometry?.type || "unknown"
+                });
+                setSelectedObject(child);
+                selectedObjectRef.current = child;
+                foundObject = true;
+              }
+            }
+          }
+        });
+        
+        console.log(`Scene scan: ${totalObjects} total objects, ${meshObjects} meshes, found: ${foundObject}`);
+        
+        if (!foundObject) {
+          console.error("No suitable mesh objects found in scene for AI identify");
+          // Try to select the first mesh anyway as a fallback
+          sceneRef.current.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh && !selectedObject) {
+              console.log("Fallback: selecting first mesh without name/userData");
+              setSelectedObject(child);
+              selectedObjectRef.current = child;
+              foundObject = true;
+            }
+          });
+        }
+      }
+      
+      // Verify we have an object before proceeding
+      if (!selectedObject) {
+        console.error("Still no selected object after auto-selection attempt");
+        return;
+      }
+      
+      console.log("Calling identifyPart() with object:", (selectedObject as any).userData?.name || selectedObject.name || "unnamed");
+      
+      // Mark AI identify as active and call the function
+      setAiIdentifyActive(true);
+      
+      // Simple AI identify - just trigger the function without complex auto-selection
+      try {
+        identifyPart();
+        console.log("AI identify function called successfully");
+      } catch (error) {
+        console.error("Error calling identifyPart:", error);
+        setAiIdentifyActive(false); // Reset on error
+      }
+      
+      // Resume movement after AI identify
+      movementPausedRef.current = false;
+      return;
+    }
+
+    // Check for zoom trigger pattern {-1.0, -1.0, -1.0, 0.0} (Zoom In)
+    if (Math.abs(qx + 1.0) < 0.01 && Math.abs(qy + 1.0) < 0.01 && 
+        Math.abs(qz + 1.0) < 0.01 && Math.abs(qw - 0.0) < 0.01) {
+      console.log("Zoom IN trigger received from OBJ stick", { qx, qy, qz, qw });
+      
+      // Zoom in by reducing camera distance
+      if (cameraRef.current) {
+        const currentState = cameraStateRef.current;
+        currentState.camR = Math.max(2.0, currentState.camR * 0.8); // Zoom in by 20%, min distance 2
+        currentState.camAzT = currentState.camAz;
+        currentState.camElT = currentState.camEl;
+        console.log("Zoomed in, new camera distance:", currentState.camR);
+      }
+      
+      return;
+    }
+
+    // Check for zoom out trigger pattern {-2.0, -2.0, -2.0, 0.0} (Zoom Out)
+    if (Math.abs(qx + 2.0) < 0.01 && Math.abs(qy + 2.0) < 0.01 && 
+        Math.abs(qz + 2.0) < 0.01 && Math.abs(qw - 0.0) < 0.01) {
+      console.log("Zoom OUT trigger received from OBJ stick", { qx, qy, qz, qw });
+      
+      // Zoom out by increasing camera distance
+      if (cameraRef.current) {
+        const currentState = cameraStateRef.current;
+        currentState.camR = Math.min(20.0, currentState.camR * 1.25); // Zoom out by 25%, max distance 20
+        currentState.camAzT = currentState.camAz;
+        currentState.camElT = currentState.camEl;
+        console.log("Zoomed out, new camera distance:", currentState.camR);
+      }
+      
+      return;
+    }
+
+    // Check for split mesh trigger pattern {3.0, 3.0, 3.0, 0.0} (Split Mesh)
+    if (Math.abs(qx - 3.0) < 0.01 && Math.abs(qy - 3.0) < 0.01 && 
+        Math.abs(qz - 3.0) < 0.01 && Math.abs(qw - 0.0) < 0.01) {
+      console.log("Split mesh trigger received from CAM stick", { qx, qy, qz, qw });
+      
+      // Prevent multiple rapid triggers (use ref instead of window property)
+      const now = Date.now();
+      if (now - splitMeshLastTimeRef.current < 2000) {
+        console.log("Split mesh trigger ignored - too soon since last trigger");
+        return;
+      }
+      splitMeshLastTimeRef.current = now;
+      
+      console.log("Current selectedObject:", selectedObject ? selectedObject.name : "none");
+      
+      // Auto-select first available object if none is selected (same logic as AI identify)
+      if (!selectedObject && sceneRef.current) {
+        console.log("No object selected for split mesh, searching for first available mesh...");
+        let foundObject = false;
+        let totalObjects = 0;
+        let meshObjects = 0;
+        
+        sceneRef.current.traverse((child) => {
+          totalObjects++;
+          if ((child as THREE.Mesh).isMesh) {
+            meshObjects++;
+            // Less strict requirements - any mesh with userData or name
+            if (!selectedObject && !foundObject) {
+              const userData = (child as any).userData;
+              const hasName = userData?.name || child.name;
+              
+              if (hasName || userData) {
+                console.log("Auto-selecting object for split mesh:", {
+                  name: hasName || "unnamed",
+                  userData: !!userData,
+                  meshType: (child as THREE.Mesh).geometry?.type || "unknown",
+                  hasGeometry: !!(child as THREE.Mesh).geometry,
+                  vertexCount: (child as THREE.Mesh).geometry?.attributes?.position?.count || 0
+                });
+                setSelectedObject(child);
+                selectedObjectRef.current = child;
+                foundObject = true;
+              }
+            }
+          }
+        });
+        
+        console.log(`Scene scan: ${totalObjects} total objects, ${meshObjects} meshes, found: ${foundObject}`);
+        
+        if (!foundObject) {
+          console.error("No suitable mesh objects found in scene for split mesh");
+          // Try to select the first mesh anyway as a fallback
+          sceneRef.current.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh && !selectedObject) {
+              console.log("Fallback: selecting first mesh without name/userData for split mesh", {
+                meshType: (child as THREE.Mesh).geometry?.type || "unknown",
+                hasGeometry: !!(child as THREE.Mesh).geometry,
+                vertexCount: (child as THREE.Mesh).geometry?.attributes?.position?.count || 0
+              });
+              setSelectedObject(child);
+              selectedObjectRef.current = child;
+              foundObject = true;
+            }
+          });
+        }
+      }
+      
+      // Verify we have an object before proceeding
+      if (!selectedObject) {
+        console.error("Still no selected object after auto-selection attempt for split mesh");
+        return;
+      }
+      
+      // Validate the selected object for split mesh requirements
+      const mesh = selectedObject as THREE.Mesh;
+      const hasGeometry = !!(mesh.geometry);
+      const hasVertices = mesh.geometry?.attributes?.position?.count > 0;
+      const hasFaces = !!(mesh.geometry?.index) && mesh.geometry.index.array.length > 0;
+      
+      console.log("Split mesh validation:", {
+        objectName: (selectedObject as any).userData?.name || selectedObject.name || "unnamed",
+        hasGeometry,
+        hasVertices,
+        vertexCount: mesh.geometry?.attributes?.position?.count || 0,
+        hasFaces,
+        faceCount: mesh.geometry?.index ? mesh.geometry.index.array.length / 3 : 0,
+        geometryType: mesh.geometry?.type || "unknown"
+      });
+      
+      if (!hasGeometry || !hasVertices || !hasFaces) {
+        console.error("Selected object doesn't meet requirements for split mesh:", {
+          hasGeometry,
+          hasVertices,
+          hasFaces
+        });
+        return;
+      }
+      
+      // Safety check: don't process very large meshes that could freeze the app
+      const vertexCount = mesh.geometry.attributes.position.count;
+      const faceCount = mesh.geometry.index ? mesh.geometry.index.array.length / 3 : 0;
+      
+      if (vertexCount > 50000 || faceCount > 100000) {
+        console.error("Mesh too large for split mesh - would freeze the app:", {
+          vertexCount,
+          faceCount,
+          maxVertices: 50000,
+          maxFaces: 100000
+        });
+        return;
+      }
+      
+      console.log("All validations passed, calling handleSplitMesh() with object:", (selectedObject as any).userData?.name || selectedObject.name || "unnamed");
+      
+      // Trigger split mesh functionality with timeout protection
+      try {
+        console.log("About to call handleSplitMesh()...");
+        
+        // Add timeout protection
+        const splitTimeout = setTimeout(() => {
+          console.error("Split mesh operation timed out - preventing freeze");
+          setLoading(false);
+        }, 10000); // 10 second timeout
+        
+        handleSplitMesh().finally(() => {
+          clearTimeout(splitTimeout);
+        });
+        
+        console.log("Split mesh function called successfully");
+      } catch (error) {
+        console.error("Error calling handleSplitMesh:", error);
+        setLoading(false); // Ensure loading state is reset on error
+      }
+      
+      return;
+    }
+
+    // Check for pause trigger pattern {0.0, 0.0, 0.0, 1.0} (identity quaternion)
+    if (Math.abs(qx - 0.0) < 0.001 && Math.abs(qy - 0.0) < 0.001 && 
+        Math.abs(qz - 0.0) < 0.001 && Math.abs(qw - 1.0) < 0.001) {
+      console.log("Movement pause trigger received from OBJ stick");
+      movementPausedRef.current = !movementPausedRef.current; // Toggle pause
+      // Stop all movement immediately when paused
+      if (movementPausedRef.current) {
+        cameraStateRef.current.translateT.set(0, 0);
+        cameraStateRef.current.translateV.set(0, 0);
+      }
+      return;
+    }
+
+    // Skip ALL movement processing if paused - don't even calculate
+    if (movementPausedRef.current) {
+      cameraStateRef.current.translateT.set(0, 0);
+      return;
+    }
+
     qDevObjRef.current.set(qx, qy, qz, qw).normalize();
     let qRel = qDevObjRef.current.clone();
     if (objZeroSetRef.current) qRel.premultiply(qZeroObjInvRef.current);
     qRel.premultiply(qAxisFixRef.current);
 
     eObjRef.current.setFromQuaternion(qRel, "YXZ");
+    
+    // Apply very aggressive dead zone to eliminate jitter
+    const DEAD_ZONE = 0.25; // Much larger dead zone
+    let tiltX = eObjRef.current.x;
+    let tiltY = eObjRef.current.y;
+    
+    if (Math.abs(tiltX) < DEAD_ZONE) tiltX = 0;
+    if (Math.abs(tiltY) < DEAD_ZONE) tiltY = 0;
+    
+    // Apply very strong smoothing filter for ultra-smooth movements
+    const smoothedX = tiltX * 0.2; // Much stronger filtering
+    const smoothedY = tiltY * 0.2; // Much stronger filtering
+    
     cameraStateRef.current.translateT.set(
-      eObjRef.current.z * 1.6,
-      eObjRef.current.x * 1.4
+      smoothedY * 0.8,  // Further reduced sensitivity
+      smoothedX * 0.6   // Further reduced sensitivity
     );
     
     // Debug: log first few updates
     if (!objZeroSetRef.current || Math.random() < 0.01) {
       console.log("OBJ quat update:", {
         euler: { x: eObjRef.current.x, y: eObjRef.current.y, z: eObjRef.current.z },
+        filtered: { x: smoothedX, y: smoothedY },
         translateT: { x: cameraStateRef.current.translateT.x, y: cameraStateRef.current.translateT.y }
       });
     }
@@ -529,7 +826,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         if (camera) {
           // Smooth interpolation for translate
           if (objConnectedRef.current) {
-            const a = 1 - Math.exp(-dt / 14);
+            const a = 1 - Math.exp(-dt / 25); // Much slower for ultra-smooth movement
             state.translateV.lerp(state.translateT, a);
           }
 
@@ -1512,12 +1809,22 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       !rendererRef.current ||
       !sceneRef.current ||
       !cameraRef.current
-    )
+    ) {
+      console.error("identifyPart: Missing required references", {
+        selectedObject: !!selectedObject,
+        renderer: !!rendererRef.current,
+        scene: !!sceneRef.current,
+        camera: !!cameraRef.current,
+      });
       return;
+    }
+
+    console.log("identifyPart: Starting AI identification for", (selectedObject as any).userData?.name);
 
     // Check cache first
     const userData = (selectedObject as any).userData;
     if (userData && userData.annotatedImage) {
+      console.log("identifyPart: Using cached result");
       setAnnotatedImage(userData.annotatedImage);
       setShowAnnotatedModal(true);
       return;
@@ -1532,10 +1839,9 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
       if (composerRef.current) composerRef.current.render();
       else rendererRef.current.render(sceneRef.current, cameraRef.current);
 
-      const screenshot = rendererRef.current.domElement.toDataURL(
-        "image/jpeg",
-        0.8
-      );
+      const screenshot = rendererRef.current.domElement.toDataURL("image/jpeg", 0.8);
+
+      console.log("identifyPart: Screenshot captured, size:", screenshot.length);
 
       // 2. Gather Mesh Data
       const mesh = selectedObject as THREE.Mesh;
@@ -1555,7 +1861,10 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         centerPoint: center,
       };
 
+      console.log("identifyPart: Mesh analysis prepared", meshAnalysis);
+
       // 3. Call API
+      console.log("identifyPart: Calling AI API...");
       const res = await fetch("/api/ai-explain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1567,7 +1876,14 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         }),
       });
 
+      console.log("identifyPart: API response status:", res.status);
+
+      if (!res.ok) {
+        throw new Error(`API request failed with status ${res.status}`);
+      }
+
       const data = await res.json();
+      console.log("identifyPart: API response received", data);
 
       if (data.error) throw new Error(data.error);
 
@@ -1584,6 +1900,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         name: data.name,
         description: data.description,
         type: data.category,
+        annotatedImage: data.annotatedImage || null,
       }));
 
       // 5. Cache data in userData
@@ -1597,31 +1914,44 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         };
       }
 
-      // 6. Show annotated image in modal
+      // 6. Show annotated image if available
       if (data.annotatedImage) {
-        console.log("Setting annotated image and showing modal");
         setAnnotatedImage(data.annotatedImage);
-      } else {
-        console.warn("No annotated image in response - modal will not show");
+        setShowAnnotatedModal(true);
       }
+    } catch (error) {
+      console.error("identifyPart: Error during AI identification:", error);
 
-      // Signal loader to complete and close
-      setIsIdentifying(false);
-      setInferenceLoaderReady(true);
-      // Wait for loader animation to complete
-      setTimeout(() => {
-        setShowInferenceLoader(false);
-        setInferenceLoaderReady(false);
-        if (data.annotatedImage) {
-          setShowAnnotatedModal(true);
-        }
-      }, 1500);
-    } catch (err) {
-      console.error("Identification failed:", err);
+      // Fallback: Show basic info without AI
+      setInspectorData((prev) => ({
+        ...prev,
+        name: (selectedObject as any).userData?.name || "Unknown Part",
+        description: "AI identification failed. Please try again or check your API configuration.",
+        type: "Unknown",
+      }));
+    } finally {
       setIsIdentifying(false);
       setShowInferenceLoader(false);
-      alert("Failed to identify part");
+      // Note: aiIdentifyActive remains true until user presses Button A again to close modal
     }
+  };
+
+  const handleExport = () => {
+    if (!sceneRef.current) return;
+
+    // Export the scene as GLB
+    new GLTFExporter().parse(
+      sceneRef.current,
+      (result) => {
+        const output = JSON.stringify(result, null, 2);
+        const blob = new Blob([output], { type: "text/plain" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `model-${Date.now()}.glb`;
+        link.click();
+      },
+      (err) => console.error(err)
+    );
   };
 
   return (
