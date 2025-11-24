@@ -1,11 +1,26 @@
 'use client';
 
+import React from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
+import { useState } from 'react';
 
 const CubeViewer = dynamic(() => import('@/components/CubeViewer'), { ssr: false });
 
 export default function Home() {
+  const [showMobileModal, setShowMobileModal] = useState(false);
+
+  const handleLaunchDemoClick = (
+    e?: React.MouseEvent<HTMLAnchorElement | HTMLButtonElement>
+  ) => {
+    if (typeof window === 'undefined') return;
+    // Only intercept navigation on smaller screens
+    if (window.innerWidth < 1024) {
+      e?.preventDefault();
+      setShowMobileModal(true);
+    }
+  };
+
   return (
     <div className="relative min-h-screen bg-[#E5E6DA] text-[#1D1E15] font-mono flex flex-col">
       
@@ -54,6 +69,7 @@ export default function Home() {
           <Link
             href="/dashboard"
             className="px-5 py-1.5 bg-[#DF6C42] text-[#E5E6DA] text-[10px] uppercase font-bold hover:bg-[#1D1E15] transition-colors"
+            onClick={handleLaunchDemoClick}
           >
             View Demo
           </Link>
@@ -80,30 +96,41 @@ export default function Home() {
         <div className="col-span-12 lg:col-span-7 flex flex-col divide-y divide-[#1D1E15]">
           
            {/* Hero Section */}
-           <div className="pl-10 flex flex-col justify-center gap-6 flex-1">
-           <img src="/logo.png" alt="Mesh Logo" className="w-12 h-12 object-contain invert" />
+           <div className="pl-4 lg:pl-10 flex flex-col justify-center gap-4 lg:gap-6 flex-1">
+           <img src="/logo.png" alt="Mesh Logo" className="w-8 h-8 lg:w-12 lg:h-12 object-contain invert" />
 
-             <div className="inline-flex items-center gap-2 px-2 py-0.5 border border-[#1D1E15] text-[10px] uppercase tracking-wider w-fit">
+             <div className="inline-flex items-center gap-2 px-2 py-0.5 border border-[#1D1E15] text-[8px] lg:text-[10px] uppercase tracking-wider w-fit">
               
                <div className="w-1.5 h-1.5 bg-[#DF6C42]"></div>
-               HackWestern 12
+               Mesh
              </div>
              
-             <h2 className="text-5xl font-sans font-medium leading-none tracking-tight text-[#1D1E15]">
+             <h2 className="text-3xl lg:text-5xl font-sans font-medium leading-none tracking-tight text-[#1D1E15]">
                The Coordination<br/> Layer for GeoSpatial Data
              </h2>
              
-             <p className="text-sm opacity-70 max-w-xl leading-relaxed">
+             <p className="text-xs lg:text-sm opacity-70 max-w-lg lg:max-w-xl leading-relaxed">
                Blazing fast 3D model processing. Generate meshes, split components, and visualize geometry — without complex pipelines.
              </p>
              
-             <div className="flex items-center gap-4 pt-2">
-               <button className="px-6 py-3 border border-[#1D1E15] text-[10px] uppercase font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors cursor-pointer">
+             {/* Mobile 3D Visualization Box */}
+             <div className="lg:hidden h-64 border border-[#1D1E15] relative overflow-hidden bg-[#E5E6DA] shrink-0 my-4">
+               <div className="absolute inset-0 flex items-center justify-center">
+                   <CubeViewer />
+               </div>
+               {/* Overlay UI Elements */}
+               <div className="absolute top-4 left-4 text-[10px] uppercase opacity-50">Rendering...</div>
+               <div className="absolute bottom-4 right-4 text-[10px] uppercase opacity-50">36GB/s</div>
+             </div>
+             
+             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 pt-2">
+              <button className="w-full sm:w-auto px-6 py-3 border border-[#1D1E15] text-[10px] uppercase font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors cursor-pointer">
                  Learn more
                </button>
                <Link
                  href="/dashboard"
-                 className="px-6 py-3 bg-[#DF6C42] text-[#E5E6DA] text-[10px] uppercase font-bold hover:bg-[#1D1E15] transition-colors"
+                 className="w-full sm:w-auto px-6 py-3 bg-[#DF6C42] text-[#E5E6DA] text-[10px] uppercase font-bold hover:bg-[#1D1E15] transition-colors text-center sm:text-left mb-2 sm:mb-0"
+                 onClick={handleLaunchDemoClick}
                >
                  Launch Demo
                </Link>
@@ -132,14 +159,8 @@ export default function Home() {
         {/* Right Visualization Column */}
         <div className="col-span-12 lg:col-span-4 flex flex-col divide-y divide-[#1D1E15] bg-[#E5E6DA]">
           
-          {/* Status Header */}
-          <div className="p-4 flex justify-between items-center shrink-0">
-            <div className="text-[10px] uppercase font-bold">Data Volume</div>
-            <div className="text-[10px] font-mono">0h:12m:43s</div>
-          </div>
-
           {/* 3D Visualization Box */}
-          <div className="h-[50vh] border-b border-[#1D1E15] relative overflow-hidden bg-[#E5E6DA] shrink-0">
+          <div className="hidden lg:block h-[50vh] border-b border-[#1D1E15] relative overflow-hidden bg-[#E5E6DA] shrink-0">
             <div className="absolute inset-0 flex items-center justify-center">
                 <CubeViewer />
             </div>
@@ -152,7 +173,7 @@ export default function Home() {
           <div className="flex-1 grid grid-rows-3 divide-y divide-[#1D1E15] min-h-0">
             <div className="px-6 py-4 flex flex-col justify-center group hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors">
                 <div className="text-[10px] uppercase opacity-50 mb-2">Preloaded Models</div>
-                <div className="text-2xl font-bold mb-3">5</div>
+                <div className="text-2xl font-bold mb-3">6</div>
                 <div className="w-full h-1 bg-[#DF6C42]/20 overflow-hidden">
                   <div className="h-full w-[95%] bg-[#DF6C42]"></div>
                 </div>
@@ -567,17 +588,100 @@ export default function Home() {
               {/* Integration Flow */}
               <div className="mt-8 border border-[#1D1E15] p-8">
                 <div className="text-[10px] uppercase opacity-50 mb-4">Model Workflow</div>
-                <div className="flex flex-wrap items-center gap-4 justify-center">
+                <div className="flex flex-col lg:flex-wrap items-center gap-4 lg:justify-center">
                   {['Upload', 'AI Identification Trigger', 'GPT-4 Processing', 'Gemini Pro Annotation', 'Export'].map((step, idx) => (
-                    <div key={idx} className="flex items-center gap-4">
-                      <div className="px-4 py-2 border border-[#1D1E15] text-xs uppercase">
+                    <React.Fragment key={idx}>
+                      <div className="px-4 py-2 border border-[#1D1E15] text-xs uppercase mx-auto lg:mx-0 w-fit lg:w-auto text-center lg:text-left">
                         {step}
                       </div>
                       {idx < 4 && (
-                        <div className="w-6 h-px bg-[#1D1E15] opacity-20"></div>
+                        <div className="hidden lg:block w-6 h-px bg-[#1D1E15] opacity-20"></div>
                       )}
-                    </div>
+                      {idx < 4 && (
+                        <div className="lg:hidden w-full flex justify-center py-2">
+                          <div className="w-6 h-px bg-[#1D1E15] opacity-20"></div>
+                        </div>
+                      )}
+                    </React.Fragment>
                   ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Upload & Export Section */}
+      <section id="upload-export" className="border-t border-[#1D1E15] bg-[#E5E6DA]">
+        <div className="grid grid-cols-12 divide-x divide-[#1D1E15]">
+          {/* Left Sidebar Spacer */}
+          <div className="hidden lg:block col-span-1"></div>
+          
+          {/* Main Content */}
+          <div className="col-span-12 lg:col-span-11">
+            <div className="px-10 py-16 border-b border-[#1D1E15]">
+              <div className="inline-flex items-center gap-2 px-2 py-0.5 border border-[#1D1E15] text-[10px] uppercase tracking-wider w-fit mb-8">
+                <div className="w-1.5 h-1.5 bg-[#DF6C42]"></div>
+                FILE MANAGEMENT
+              </div>
+              
+              <h3 className="text-4xl font-sans font-medium leading-none tracking-tight text-[#1D1E15] mb-12">
+                Upload & Export
+              </h3>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 border border-[#1D1E15]">
+                {/* Upload */}
+                <div className="p-8 border-r border-b border-[#1D1E15] lg:border-b-0 hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex flex-col h-full">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="w-8 h-8 border-2 border-[#1D1E15] flex items-center justify-center">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                    </div>
+                  </div>
+                  <p className="text-sm opacity-70 leading-relaxed mb-6 flex-1">
+                    Upload your own GLB files created on any CAD software to break down and learn about its 
+                    components in real time. Our intelligent mesh analysis automatically identifies individual 
+                    parts, materials, and structural elements, giving you instant insights into complex 3D models.
+                    Perfect for engineering analysis, educational purposes, or design optimization.
+                  </p>
+                  <div className="pt-4 border-t border-[#1D1E15] grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-[10px] uppercase opacity-50 mb-1">Supported Formats</div>
+                      <div className="text-sm font-medium">GLB (More coming soon!)</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase opacity-50 mb-1">Max Size</div>
+                      <div className="text-sm font-medium">100MB</div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Export */}
+                <div className="p-8 hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex flex-col h-full">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="w-8 h-8 border-2 border-[#1D1E15] flex items-center justify-center">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <p className="text-sm opacity-70 leading-relaxed mb-6 flex-1">
+                    Use our wide variety of models to export into your favourite CAD softwares and resize 
+                    for commercial use or 3D printing. Export individual components or complete assemblies 
+                    with precise measurements and material properties. Compatible with major CAD platforms 
+                    including SolidWorks, AutoCAD, Fusion 360, and Blender.
+                  </p>
+                  <div className="pt-4 border-t border-[#1D1E15] grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-[10px] uppercase opacity-50 mb-1">Export Formats</div>
+                      <div className="text-sm font-medium">GLB (More coming soon!)</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase opacity-50 mb-1">Use Cases</div>
+                      <div className="text-sm font-medium">3D Printing, CAD and more!</div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -799,7 +903,7 @@ export default function Home() {
               </div>
               
               <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-[10px] uppercase opacity-50">
-                <div>© 2025 Mesh. Built by Fenil Shah, Dev Patel, Kush Patel.</div>
+                <div>© 2025 Mesh. Built by <a href="https://www.linkedin.com/in/fenilshah05/" target="_blank" rel="noopener noreferrer" className="hover:text-[#DF6C42] transition-colors">Fenil Shah</a>, <a href="https://www.linkedin.com/in/devp19/" target="_blank" rel="noopener noreferrer" className="hover:text-[#DF6C42] transition-colors">Dev Patel</a>, <a href="https://www.linkedin.com/in/kushp4444/" target="_blank" rel="noopener noreferrer" className="hover:text-[#DF6C42] transition-colors">Kush Patel</a>.</div>
                 <div className="flex items-center gap-4">
                   <span>v.2.0.4</span>
                   <span className="opacity-30">/</span>
@@ -810,6 +914,54 @@ export default function Home() {
           </div>
         </div>
       </footer>
+
+      {/* Mobile Modal */}
+      {showMobileModal && (
+        <div className="lg:hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowMobileModal(false)}
+          />
+          
+          {/* Modal Content */}
+          <div className="relative bg-[#E5E6DA] border-2 border-[#1D1E15] p-8 max-w-sm w-full">
+            {/* Close Button */}
+            <button
+              onClick={() => setShowMobileModal(false)}
+              className="absolute top-4 right-4 w-8 h-8 border border-[#1D1E15] flex items-center justify-center hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            
+            {/* Modal Header */}
+            <div className="flex items-center gap-2 mb-6">
+              <div className="w-1.5 h-1.5 bg-[#DF6C42]"></div>
+              <span className="text-[10px] uppercase tracking-wider">DEMO ACCESS</span>
+            </div>
+            
+            {/* Modal Title */}
+            <h3 className="text-2xl font-sans font-medium leading-none tracking-tight text-[#1D1E15] mb-4">
+              LARGER SCREEN<br/>RECOMMENDED
+            </h3>
+            
+            {/* Modal Message */}
+            <p className="text-sm opacity-70 leading-relaxed mb-6">
+              For the best demo experience, please view on a tablet or desktop device. The full 3D visualization and interactive features require a larger screen.
+            </p>
+            
+            {/* Action Button */}
+            <button
+              onClick={() => setShowMobileModal(false)}
+              className="w-full px-6 py-3 bg-[#DF6C42] text-[#E5E6DA] text-[10px] uppercase font-bold hover:bg-[#1D1E15] transition-colors"
+            >
+              GOT IT
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
