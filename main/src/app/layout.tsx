@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "VisionView — 3D Model Generator",
+  title: "Mesh — Coordination Layer for GeoSpatial Data",
   description: "Fast, verifiable, and trust-minimized 3D model processing",
   icons: {
     icon: '/logo.png',
