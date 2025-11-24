@@ -278,7 +278,7 @@ export default function Home() {
               </h3>
               
               {/* Combined Bar Graph - Sketchfab Import vs SAM3D META Model */}
-              <div className="border border-[#1D1E15] mb-8">
+              <div className="border border-[#1D1E15] mb-8 overflow-hidden">
                 <div className="p-8">
                   {/* Explanation Section */}
                   <div className="mb-8 pb-6 border-b border-[#1D1E15]">
@@ -302,9 +302,9 @@ export default function Home() {
                       This chart shows the average time to render models across different mesh complexities. Lower render times indicate faster processing.
                     </p>
                   </div>
-                  <div className="flex gap-4 mb-6">
+                  <div className="flex flex-col md:flex-row gap-4 mb-6">
                     {/* Y-Axis */}
-                    <div className="flex flex-col justify-between h-80 text-[8px] uppercase opacity-40 pt-1 pb-8">
+                    <div className="flex flex-row md:flex-col justify-between md:h-80 text-[8px] uppercase opacity-40 pt-1 pb-2 md:pb-8 md:pr-2 gap-2 md:gap-0">
                       <span>5.0s</span>
                       <span>4.0s</span>
                       <span>3.0s</span>
@@ -314,7 +314,7 @@ export default function Home() {
                     </div>
                     
                     {/* Chart Bars */}
-                    <div className="flex-1 h-80 flex items-end gap-4 relative">
+                    <div className="flex-1 h-80 flex flex-wrap md:flex-nowrap items-end gap-4 relative">
                       {[
                         { label: 'Small Mesh (<10 mesh objects)', sketchfab: 1.3, meta: 2.2 },
                         { label: 'Med Mesh (10-50 mesh objects)', sketchfab: 2.0, meta: 2.9 },
