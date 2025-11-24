@@ -13,6 +13,9 @@ import * as BufferGeometryUtils from "three/addons/utils/BufferGeometryUtils.js"
 import { AnimatePresence } from "framer-motion";
 import BlockyLoader from "./BlockyLoader";
 import AIInferenceLoader from "./AIInferenceLoader";
+import { DEMO_MODELS, getDemoAnnotation, DemoModel } from "@/lib/demo-config";
+
+const IS_PRODUCTION_DEMO = process.env.NEXT_PUBLIC_PRODUCTION_DEMO === "true";
 
 interface ComponentData {
   mesh: THREE.Mesh;
@@ -69,6 +72,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   useEffect(() => { aiIdentifyActiveRef.current = aiIdentifyActive; }, [aiIdentifyActive]);
 
   const [inferenceLoaderReady, setInferenceLoaderReady] = useState(false);
+  const [currentDemoModelId, setCurrentDemoModelId] = useState<string | null>(null);
   const [objConnected, setObjConnected] = useState(false);
   const [camConnected, setCamConnected] = useState(false);
   const [objDeviceName, setObjDeviceName] = useState<string>("—");
@@ -1849,6 +1853,49 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     }
 
     const objectName = (currentObject as any).userData?.name || currentObject.name || "Unknown";
+    
+    if (IS_PRODUCTION_DEMO && currentDemoModelId) {
+      console.log("Production Demo: Loading preloaded annotation for", objectName);
+      
+      // Show loader for 5 seconds to simulate AI processing
+      setIsIdentifying(true);
+      setShowInferenceLoader(true);
+      
+      setTimeout(() => {
+        // In production demo, we use the single default annotation for the model
+        const annotation = getDemoAnnotation(currentDemoModelId);
+        
+        if (annotation) {
+          setInspectorData((prev) => ({
+            ...prev,
+            name: annotation.name,
+            description: annotation.description,
+            type: annotation.category,
+            annotatedImage: annotation.annotatedImage,
+          }));
+          setAnnotatedImage(annotation.annotatedImage);
+          setShowAnnotatedModal(true);
+          setAiIdentifyActive(true);
+        } else {
+          console.warn("No demo annotation found for model:", currentDemoModelId);
+          // Fallback
+           setInspectorData((prev) => ({
+            ...prev,
+            name: objectName,
+            description: "This is a demo part without a specific preloaded annotation.",
+            type: "Demo Component",
+          }));
+          alert("No preloaded annotation for this model in demo mode.");
+        }
+        
+        // Hide loader
+        setIsIdentifying(false);
+        setShowInferenceLoader(false);
+      }, 5000); // 5 second delay
+      
+      return;
+    }
+
     console.log("identifyPart: Starting AI identification for", objectName);
     console.log("identifyPart: Object reference:", currentObject);
     console.log("identifyPart: Object UUID:", currentObject.uuid);
@@ -2022,6 +2069,18 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     );
   };
 
+  const handleDemoSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const modelId = e.target.value;
+    if (!modelId) return;
+    
+    const model = DEMO_MODELS.find(m => m.id === modelId);
+    if (model) {
+      console.log("Loading demo model:", model.name);
+      setCurrentDemoModelId(modelId);
+      loadModelFromUrl(model.path, false);
+    }
+  };
+
   return (
     <div className="absolute inset-0 bg-[#E5E6DA] z-0">
       <div className="w-full h-full relative">
@@ -2101,23 +2160,23 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
           </div>
 
           <div className="flex items-center gap-2 pointer-events-auto">
-            <div className="flex items-center gap-1 bg-[#1D1E15]/5 border border-[#1D1E15]/10 rounded-lg p-1">
+            <div className="flex items-center gap-1.5 bg-[#E5E6DA]/90 border border-[#1D1E15] p-1 backdrop-blur-md h-[32px]">
               <button
                 onClick={() => setViewMode("holo")}
-                className={`px-2.5 py-1 text-[10px] rounded font-medium transition-colors cursor-pointer ${
+                className={`h-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors cursor-pointer flex items-center justify-center ${
                   viewMode === "holo"
-                    ? "bg-[#1D1E15] text-[#E5E6DA]"
-                    : "text-[#1D1E15]/60 hover:text-[#1D1E15]"
+                    ? "bg-[#DF6C42] text-[#E5E6DA]"
+                    : "bg-transparent text-[#1D1E15] hover:bg-[#1D1E15] hover:text-[#E5E6DA]"
                 }`}
               >
                 Wireframe
               </button>
               <button
                 onClick={() => setViewMode("solid")}
-                className={`px-2.5 py-1 text-[10px] rounded font-medium transition-colors cursor-pointer ${
+                className={`h-full px-3 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors cursor-pointer flex items-center justify-center ${
                   viewMode === "solid"
-                    ? "bg-[#1D1E15] text-[#E5E6DA]"
-                    : "text-[#1D1E15]/60 hover:text-[#1D1E15]"
+                    ? "bg-[#DF6C42] text-[#E5E6DA]"
+                    : "bg-transparent text-[#1D1E15] hover:bg-[#1D1E15] hover:text-[#E5E6DA]"
                 }`}
               >
                 Solid
@@ -2132,7 +2191,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
             />
             <label
               htmlFor="file-input"
-              className="px-3 py-1.5 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] text-[10px] font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex items-center gap-1.5 cursor-pointer uppercase tracking-wide"
+              className="h-[32px] px-3 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] text-[10px] font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex items-center gap-1.5 cursor-pointer uppercase tracking-wide"
             >
               <svg
                 width="12"
@@ -2150,7 +2209,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
             </label>
             <button
               onClick={exportGLB}
-              className="px-3 py-1.5 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] text-[10px] font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex items-center gap-1.5 uppercase tracking-wide cursor-pointer"
+              className="h-[32px] px-3 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] text-[10px] font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex items-center gap-1.5 uppercase tracking-wide cursor-pointer"
             >
               <svg
                 width="12"
@@ -2168,7 +2227,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
             </button>
             <button
               onClick={resetView}
-              className="px-3 py-1.5 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] text-[10px] font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex items-center gap-1.5 uppercase tracking-wide"
+              className="h-[32px] px-3 bg-[#E5E6DA] border border-[#1D1E15] text-[#1D1E15] text-[10px] font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex items-center gap-1.5 uppercase tracking-wide cursor-pointer"
             >
               <svg
                 width="12"
@@ -2185,7 +2244,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
             {onClose && (
               <button
                 onClick={onClose}
-                className="px-3 py-1.5 bg-[#1D1E15] text-[#E5E6DA] text-[10px] font-bold hover:bg-[#DF6C42] transition-colors uppercase tracking-wide cursor-pointer"
+                className="h-[42px] px-3 bg-[#1D1E15] text-[#E5E6DA] text-[10px] font-bold hover:bg-[#DF6C42] transition-colors uppercase tracking-wide cursor-pointer rounded-lg"
               >
                 Close
               </button>
@@ -2197,26 +2256,44 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         <div className="absolute bottom-0 left-0 w-full z-10 p-4 pointer-events-none">
           <div className="max-w-2xl mx-auto pointer-events-auto">
             <div className="bg-[#E5E6DA]/80 border border-[#1D1E15] backdrop-blur-md p-1.5 flex gap-2 items-center shadow-lg">
-              <input
-                id="prompt-input"
-                type="text"
-                placeholder="Generate procedural model"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === "Enter") {
-                    generateModel(prompt);
-                  }
-                }}
-                className="flex-1 bg-transparent border-none outline-none text-[#1D1E15] placeholder-[#1D1E15]/40 text-[10px] font-mono px-3"
-              />
-              <button
-                onClick={() => generateModel(prompt)}
-                disabled={!prompt.trim() || loading}
-                className="px-4 py-2 bg-[#1D1E15] text-[#E5E6DA] text-[10px] font-bold hover:bg-[#DF6C42] transition-colors flex-shrink-0 uppercase tracking-wide cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Generate
-              </button>
+              {IS_PRODUCTION_DEMO ? (
+                <select
+                  onChange={handleDemoSelect}
+                  defaultValue=""
+                  className="flex-1 bg-transparent border-none outline-none text-[#1D1E15] text-[10px] font-mono px-3 py-2 cursor-pointer appearance-none"
+                  style={{ backgroundImage: 'none' }} // Remove default arrow if desired, or keep it
+                >
+                  <option value="" disabled>Select a Demo Model</option>
+                  {DEMO_MODELS.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <>
+                  <input
+                    id="prompt-input"
+                    type="text"
+                    placeholder="Generate procedural model"
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === "Enter") {
+                        generateModel(prompt);
+                      }
+                    }}
+                    className="flex-1 bg-transparent border-none outline-none text-[#1D1E15] placeholder-[#1D1E15]/40 text-[10px] font-mono px-3"
+                  />
+                  <button
+                    onClick={() => generateModel(prompt)}
+                    disabled={!prompt.trim() || loading}
+                    className="px-4 py-2 bg-[#1D1E15] text-[#E5E6DA] text-[10px] font-bold hover:bg-[#DF6C42] transition-colors flex-shrink-0 uppercase tracking-wide cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Generate
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
