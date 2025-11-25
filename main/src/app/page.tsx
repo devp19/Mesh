@@ -710,7 +710,7 @@ export default function Home() {
               {/* Demo Video */}
               <div className="border border-[#1D1E15] mb-8 bg-[#E5E6DA] overflow-hidden">
                 <video 
-                  src="/demo.mov" 
+                  src="/movement.mp4" 
                   autoPlay
                   loop
                   muted

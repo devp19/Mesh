@@ -6,7 +6,7 @@ interface CubeViewerProps {
   videoSrc?: string; // Path to video file in public folder, e.g., "/screen-recording.mp4"
 }
 
-export default function CubeViewer({ videoSrc = '/screen-recording.mp4' }: CubeViewerProps) {
+export default function CubeViewer({ videoSrc = '/drone.mp4' }: CubeViewerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
