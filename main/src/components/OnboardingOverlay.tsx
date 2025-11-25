@@ -121,7 +121,7 @@ export default function OnboardingOverlay({
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     placeholder="e.g. V8 Engine, Human Heart..."
-                    className="flex-1 bg-white border border-[#1D1E15]/20 text-[#1D1E15] text-xs font-mono p-3 rounded-lg outline-none focus:border-[#DF6C42] transition-colors placeholder:text-[#1D1E15]/30"
+                    className="flex-1 bg-[#1D1E15] border border-[#1D1E15] text-[#E5E6DA] text-xs font-mono p-3 rounded-lg outline-none focus:border-[#DF6C42] transition-colors placeholder:text-[#E5E6DA]/40"
                     onKeyDown={(e) => e.key === "Enter" && handleGenerateSubmit()}
                   />
                   <button

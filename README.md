@@ -34,11 +34,9 @@ Mesh is an AI-powered 3D model processing platform that automates mesh component
 
 **Performance Metrics**:
 
-- Average Sketchfab render time: 2.8s
-- Average SAM3D render time: 3.4s
-- 94.2% processing success rate
-- 62% time saved vs traditional pipelines
-- 2,847 models processed
+<img width="1005" height="525" alt="PerformanceMetricsChart" src="https://github.com/user-attachments/assets/63dff828-4bad-46a8-8237-db5f0081ca11" />
+
+<img width="1005" height="230" alt="PerformaceMetricsImage" src="https://github.com/user-attachments/assets/7a12dbd4-a361-488a-9d6e-f687e5726ff8" />
 
 #### 3. Interactive 3D Visualization
 

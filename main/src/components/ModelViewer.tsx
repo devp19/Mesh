@@ -76,6 +76,9 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
 
   const [inferenceLoaderReady, setInferenceLoaderReady] = useState(false);
   const [currentDemoModelId, setCurrentDemoModelId] = useState<string | null>(null);
+  const [isBottomDropdownOpen, setIsBottomDropdownOpen] = useState(false);
+  const bottomDropdownRef = useRef<HTMLDivElement>(null);
+  const [showInteractionHint, setShowInteractionHint] = useState(false);
   const [objConnected, setObjConnected] = useState(false);
   const [camConnected, setCamConnected] = useState(false);
   const [objDeviceName, setObjDeviceName] = useState<string>("—");
@@ -160,6 +163,36 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   useEffect(() => {
     viewModeRef.current = viewMode;
   }, [viewMode]);
+
+  // Handle clicks outside bottom dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (bottomDropdownRef.current && !bottomDropdownRef.current.contains(event.target as Node)) {
+        setIsBottomDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Show interaction hint when model loads
+  useEffect(() => {
+    if (modelReady && !showOnboarding) {
+      setShowInteractionHint(true);
+      // Auto-hide after 8 seconds
+      const timer = setTimeout(() => {
+        setShowInteractionHint(false);
+      }, 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [modelReady, showOnboarding]);
+
+  // Hide hint when user selects an object
+  useEffect(() => {
+    if (selectedObject) {
+      setShowInteractionHint(false);
+    }
+  }, [selectedObject]);
 
   // BLE UUIDs
   const SERVICE_UUID = "12345678-1234-5678-1234-56789abcdef0";
@@ -2302,19 +2335,46 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
           <div className="max-w-2xl mx-auto pointer-events-auto">
             <div className="bg-[#E5E6DA]/80 border border-[#1D1E15] backdrop-blur-md p-1.5 flex gap-2 items-center shadow-lg">
               {IS_PRODUCTION_DEMO ? (
-                <select
-                  onChange={handleDemoSelect}
-                  value={currentDemoModelId || ""}
-                  className="flex-1 bg-transparent border-none outline-none text-[#1D1E15] text-[10px] font-mono px-3 py-2 cursor-pointer appearance-none"
-                  style={{ backgroundImage: 'none' }}
-                >
-                  <option value="" disabled>Select a Demo Model</option>
-                  {DEMO_MODELS.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex-1 relative" ref={bottomDropdownRef}>
+                  <button
+                    onClick={() => setIsBottomDropdownOpen(!isBottomDropdownOpen)}
+                    className="w-full bg-[#1D1E15] border border-[#1D1E15] text-[#E5E6DA] text-[10px] font-mono px-3 py-2 rounded outline-none focus:border-[#DF6C42] transition-colors flex items-center justify-between hover:bg-[#1D1E15]/90"
+                  >
+                    <span className={currentDemoModelId ? "text-[#E5E6DA]" : "text-[#E5E6DA]/60"}>
+                      {currentDemoModelId 
+                        ? DEMO_MODELS.find(m => m.id === currentDemoModelId)?.name 
+                        : "Select a Demo Model"}
+                    </span>
+                    <svg 
+                      width="12" 
+                      height="12" 
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      strokeWidth="2"
+                      className={`transition-transform duration-200 ${isBottomDropdownOpen ? "rotate-180" : ""}`}
+                    >
+                      <path d="M6 9l6 6 6-6"/>
+                    </svg>
+                  </button>
+
+                  {isBottomDropdownOpen && (
+                    <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#1D1E15] border border-[#1D1E15] rounded shadow-lg overflow-hidden z-50 max-h-48 overflow-y-auto">
+                      {DEMO_MODELS.map((model) => (
+                        <button
+                          key={model.id}
+                          onClick={() => {
+                            handleDemoSelect({ target: { value: model.id } } as any);
+                            setIsBottomDropdownOpen(false);
+                          }}
+                          className="w-full text-left px-3 py-2.5 text-[10px] font-mono text-[#E5E6DA] hover:bg-[#DF6C42] hover:text-white transition-colors border-b border-[#E5E6DA]/10 last:border-0"
+                        >
+                          {model.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ) : (
                 <>
                   <input
@@ -2496,6 +2556,48 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
           onClick={handleClick}
           onMouseMove={handleMouseMove}
         />
+
+        {/* Interaction Hint Popup */}
+        {showInteractionHint && (
+          <div className="absolute right-8 top-1/2 -translate-y-1/2 z-40 animate-in fade-in slide-in-from-right-4 duration-500">
+            <div className="relative">
+              {/* Pointer Arrow - pointing left now */}
+              <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-0 h-0 border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent border-r-[12px] border-r-[#DF6C42]" />
+              
+              {/* Hint Box */}
+              <div className="bg-[#DF6C42] border-2 border-[#1D1E15] px-4 py-3 shadow-2xl max-w-[240px]">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 bg-[#1D1E15] rounded flex items-center justify-center shrink-0 mt-0.5">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                      <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                      <path d="M2 17l10 5 10-5"/>
+                      <path d="M2 12l10 5 10-5"/>
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-white text-xs font-bold uppercase tracking-wide mb-1">
+                      Quick Tip
+                    </p>
+                    <p className="text-white/90 text-[10px] font-mono leading-relaxed">
+                      Click on the model to open the inspector panel and explore its components
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Dismiss Button */}
+                <button
+                  onClick={() => setShowInteractionHint(false)}
+                  className="absolute -top-2 -right-2 w-6 h-6 bg-[#1D1E15] text-white rounded-full flex items-center justify-center hover:bg-[#1D1E15]/80 transition-colors cursor-pointer border-2 border-[#DF6C42]"
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Annotated Image Modal */}
         {showAnnotatedModal && annotatedImage && (
