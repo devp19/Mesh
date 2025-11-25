@@ -54,7 +54,7 @@
         name: "Brain",
         description: "A flowing piece of fabric attached to the shoulders and back, often part of a superhero's suit. For Batman, it serves as a tool for gliding and defensive purposes. Note this is a demo annotation and actual diagram will depend on the object and mesh selected.",
         category: "Superhero",
-        annotatedImage: "/annotations/batman-annotate.jpeg"
+        annotatedImage: "/annotations/brain-annotate.jpeg"
         }
     },
     {
