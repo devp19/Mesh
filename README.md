@@ -243,9 +243,41 @@ The M5StickCPlus2 provides physical control over 3D visualizations:
 - **Connection Management**: Device name-based identification, connection state monitoring
 
 ---
+## Running Mesh Yourself
+
+To run Mesh on your own machine or host it independently, you need to set the following environment variables to enable API integrations and control demo or production modes.
+
+### Required Environment Variables
+
+- `SKETCHFAB_API_KEY=`  
+  Your API key for accessing Sketchfab's model search and download services.
+
+- `OPENAI_API_KEY=`  
+  The API key for OpenAI's GPT-4 access, used for mesh component explanation generation.
+
+- `GOOGLE_API_KEY=`  
+  Google API key for any related geospatial or auxiliary services integrated into the platform.
+
+- `OPENROUTER_API_KEY=`  
+  Your OpenRouter API key to use Gemini Pro for AI-powered mesh component identification.
+
+- `NEXT_PUBLIC_PRODUCTION_DEMO=`  
+  Set to `true` for running the public production demo mode with limited AI generation capabilities.  
+  Set to `false` to enable full AI generation features (component identification and explanation).
+
+### Steps to run
+
+1. Clone the Mesh repository.  
+2. Create a `.env` file at the root of the project and insert the environment variables above with your keys.  
+3. Install dependencies by running `npm install` or `yarn install`.  
+4. Run the development server using `npm run dev` or `yarn dev`.  
+5. Access the Mesh platform locally at `http://localhost:3000`.
+
+With these settings, you can upload your own GLB files, connect the Arduino M5StickCPlus2 hardware if desired, and use the full AI-powered 3D mesh processing pipeline.
+---
 
 **Mesh** - Because understanding 3D shouldn't require a PhD in CAD software.
 
-Built by Fenil Shah, Dev Patel, Kush Patel at HackWestern 12.
+Built by Fenil Shah, Dev Patel, Kush Patel.
 
 v.2.0.4 / System Status: Nominal
