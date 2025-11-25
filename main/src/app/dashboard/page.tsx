@@ -34,7 +34,7 @@ export default function DashboardPage() {
             <p className="text-white text-[10px] md:text-xs font-medium">
               <span className="font-bold">Demo Mode:</span> This version uses preloaded models. To use your own API keys and custom models, visit our{' '}
               <a 
-                href="https://github.com/yourusername/yourrepo" 
+                href="https://github.com/devp19/Mesh" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="underline hover:text-[#E5E6DA] transition-colors font-bold"

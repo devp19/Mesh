@@ -1078,7 +1078,7 @@ export default function Home() {
                     <a href="#" className="text-xs opacity-70 hover:text-[#DF6C42] hover:opacity-100 transition-colors">
                       Documentation
                     </a>
-                    <a href="#" className="text-xs opacity-70 hover:text-[#DF6C42] hover:opacity-100 transition-colors">
+                    <a href="https://github.com/devp19/Mesh" target="_blank" rel="noopener noreferrer" className="text-xs opacity-70 hover:text-[#DF6C42] hover:opacity-100 transition-colors">
                       GitHub
                     </a>
                   </div>
