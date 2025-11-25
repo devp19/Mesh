@@ -2404,6 +2404,17 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
         </div>
         )}
 
+        {/* Control Instructions */}
+        {!showOnboarding && (
+        <div className="absolute bottom-16 right-4 z-10 pointer-events-none">
+          <div className="text-[9px] font-mono text-[#1D1E15]/40 space-y-0.5 text-right">
+            <div>Left Click + Drag: Rotate</div>
+            <div>Right Click + Drag: Pan</div>
+            <div>Scroll: Zoom In/Out</div>
+            <div>⌘ + Click + Drag: Pan (Mac)</div>
+          </div>
+        </div>
+        )}
 
         {/* Inspector Panel */}
         {showInspector && (
