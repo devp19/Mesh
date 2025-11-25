@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useState } from 'react';
+import { motion } from 'framer-motion';
 
 const CubeViewer = dynamic(() => import('@/components/CubeViewer'), { ssr: false });
 
@@ -18,6 +19,53 @@ export default function Home() {
     if (window.innerWidth < 1024) {
       e?.preventDefault();
       setShowMobileModal(true);
+    }
+  };
+
+  // Animation variants
+  const fadeInUp = {
+    hidden: { opacity: 0, y: 40 },
+    visible: { 
+      opacity: 1, 
+      y: 0,
+      transition: { duration: 0.6 }
+    }
+  };
+
+  const fadeInDown = {
+    hidden: { opacity: 0, y: -40 },
+    visible: { 
+      opacity: 1, 
+      y: 0,
+      transition: { duration: 0.6 }
+    }
+  };
+
+  const fadeIn = {
+    hidden: { opacity: 0 },
+    visible: { 
+      opacity: 1,
+      transition: { duration: 0.8 }
+    }
+  };
+
+  const staggerContainer = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1,
+        delayChildren: 0.2
+      }
+    }
+  };
+
+  const staggerItem = {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.5 }
     }
   };
 
@@ -92,38 +140,63 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Main Hero Content */}
+         {/* Main Hero Content */}
         <div className="col-span-12 lg:col-span-7 flex flex-col divide-y divide-[#1D1E15]">
           
            {/* Hero Section */}
-           <div className="pl-4 lg:pl-10 flex flex-col justify-center gap-4 lg:gap-6 flex-1">
-           <img src="/logo.png" alt="Mesh Logo" className="w-8 h-8 lg:w-12 lg:h-12 object-contain invert" />
+           <motion.div 
+             className="pl-4 lg:pl-10 flex flex-col justify-center gap-4 lg:gap-6 flex-1"
+             initial="hidden"
+             animate="visible"
+             variants={staggerContainer}
+           >
+           <motion.img 
+             src="/logo.png" 
+             alt="Mesh Logo" 
+             className="w-8 h-8 lg:w-12 lg:h-12 object-contain invert"
+             variants={staggerItem}
+           />
 
-             <div className="inline-flex items-center gap-2 px-2 py-0.5 border border-[#1D1E15] text-[8px] lg:text-[10px] uppercase tracking-wider w-fit">
+             <motion.div 
+               className="inline-flex items-center gap-2 px-2 py-0.5 border border-[#1D1E15] text-[8px] lg:text-[10px] uppercase tracking-wider w-fit"
+               variants={staggerItem}
+             >
               
                <div className="w-1.5 h-1.5 bg-[#DF6C42]"></div>
                Mesh
-             </div>
+             </motion.div>
              
-             <h2 className="text-3xl lg:text-5xl font-sans font-medium leading-none tracking-tight text-[#1D1E15]">
+             <motion.h2 
+               className="text-3xl lg:text-5xl font-sans font-medium leading-none tracking-tight text-[#1D1E15]"
+               variants={staggerItem}
+             >
                The Coordination<br/> Layer for GeoSpatial Data
-             </h2>
+             </motion.h2>
              
-             <p className="text-xs lg:text-sm opacity-70 max-w-lg lg:max-w-xl leading-relaxed">
+             <motion.p 
+               className="text-xs lg:text-sm opacity-70 max-w-lg lg:max-w-xl leading-relaxed"
+               variants={staggerItem}
+             >
                Blazing fast 3D model processing. Generate meshes, split components, and visualize geometry — without complex pipelines.
-             </p>
+             </motion.p>
              
              {/* Mobile 3D Visualization Box */}
-             <div className="lg:hidden h-64 border border-[#1D1E15] relative overflow-hidden bg-[#E5E6DA] shrink-0 my-4">
+             <motion.div 
+               className="lg:hidden h-64 border border-[#1D1E15] relative overflow-hidden bg-[#E5E6DA] shrink-0 my-4"
+               variants={staggerItem}
+             >
                <div className="absolute inset-0 flex items-center justify-center">
                    <CubeViewer />
                </div>
                {/* Overlay UI Elements */}
                <div className="absolute top-4 left-4 text-[10px] uppercase opacity-50">Rendering...</div>
                <div className="absolute bottom-4 right-4 text-[10px] uppercase opacity-50">36GB/s</div>
-             </div>
+             </motion.div>
              
-             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 pt-2">
+             <motion.div 
+               className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 pt-2"
+               variants={staggerItem}
+             >
               <button className="w-full sm:w-auto px-6 py-3 border border-[#1D1E15] text-[10px] uppercase font-bold hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors cursor-pointer">
                  Learn more
                </button>
@@ -134,8 +207,8 @@ export default function Home() {
                >
                  Launch Demo
                </Link>
-             </div>
-           </div>
+             </motion.div>
+           </motion.div>
 
            {/* Ecosystem Partners */}
            <div className="h-18 grid grid-cols-4 divide-x divide-[#1D1E15] mt-auto border-b border-[#1D1E15]">
@@ -205,17 +278,32 @@ export default function Home() {
           
           {/* Main Content */}
           <div className="col-span-12 lg:col-span-11">
-            <div className="px-10 py-16 border-b border-[#1D1E15]">
-              <div className="inline-flex items-center gap-2 px-2 py-0.5 border border-[#1D1E15] text-[10px] uppercase tracking-wider w-fit mb-8">
+            <motion.div 
+              className="px-10 py-16 border-b border-[#1D1E15]"
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, amount: 0.2 }}
+              variants={staggerContainer}
+            >
+              <motion.div 
+                className="inline-flex items-center gap-2 px-2 py-0.5 border border-[#1D1E15] text-[10px] uppercase tracking-wider w-fit mb-8"
+                variants={fadeInDown}
+              >
                 <div className="w-1.5 h-1.5 bg-[#DF6C42]"></div>
                 PROCESS
-              </div>
+              </motion.div>
               
-              <h3 className="text-4xl font-sans font-medium leading-none tracking-tight text-[#1D1E15] mb-12">
+              <motion.h3 
+                className="text-4xl font-sans font-medium leading-none tracking-tight text-[#1D1E15] mb-12"
+                variants={fadeInUp}
+              >
                 How It Works
-              </h3>
+              </motion.h3>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-0 border border-[#1D1E15]">
+              <motion.div 
+                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-0 border border-[#1D1E15]"
+                variants={staggerContainer}
+              >
                 {[
                   {
                     step: '01',
@@ -238,9 +326,10 @@ export default function Home() {
                     description: 'Export processed models, masks, and metadata in your preferred format.',
                   },
                 ].map((item, idx) => (
-                  <div
+                  <motion.div
                     key={idx}
                     className={`p-8 border-r border-[#1D1E15] last:border-r-0 hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors group`}
+                    variants={staggerItem}
                   >
                     <div className="text-[10px] uppercase opacity-50 mb-4 font-mono">{item.step}</div>
                     <h4 className="text-xl font-medium mb-3">{item.title}</h4>
@@ -251,10 +340,10 @@ export default function Home() {
                         <div className="w-1.5 h-1.5 bg-[#DF6C42]"></div>
                       </div>
                     )}
-                  </div>
+                  </motion.div>
                 ))}
-              </div>
-            </div>
+              </motion.div>
+            </motion.div>
           </div>
         </div>
       </section>
@@ -267,18 +356,33 @@ export default function Home() {
           
           {/* Main Content */}
           <div className="col-span-12 lg:col-span-11">
-            <div className="px-10 py-16 border-b border-[#1D1E15]">
-              <div className="inline-flex items-center gap-2 px-2 py-0.5 border border-[#1D1E15] text-[10px] uppercase tracking-wider w-fit mb-8">
+            <motion.div 
+              className="px-10 py-16 border-b border-[#1D1E15]"
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, amount: 0.2 }}
+              variants={staggerContainer}
+            >
+              <motion.div 
+                className="inline-flex items-center gap-2 px-2 py-0.5 border border-[#1D1E15] text-[10px] uppercase tracking-wider w-fit mb-8"
+                variants={fadeInDown}
+              >
                 <div className="w-1.5 h-1.5 bg-[#DF6C42]"></div>
                 METRICS
-              </div>
+              </motion.div>
               
-              <h3 className="text-4xl font-sans font-medium leading-none tracking-tight text-[#1D1E15] mb-12">
+              <motion.h3 
+                className="text-4xl font-sans font-medium leading-none tracking-tight text-[#1D1E15] mb-12"
+                variants={fadeInUp}
+              >
                 Performance Metrics
-              </h3>
+              </motion.h3>
               
               {/* Combined Bar Graph - Sketchfab Import vs SAM3D META Model */}
-              <div className="border border-[#1D1E15] mb-8 overflow-hidden">
+              <motion.div 
+                className="border border-[#1D1E15] mb-8 overflow-hidden"
+                variants={fadeInUp}
+              >
                 <div className="p-8">
                   {/* Explanation Section */}
                   <div className="mb-8 pb-6 border-b border-[#1D1E15]">
@@ -414,10 +518,13 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
-              </div>
+              </motion.div>
               
               {/* Key Metrics */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-0 border border-[#1D1E15] mb-8">
+              <motion.div 
+                className="grid grid-cols-1 md:grid-cols-3 gap-0 border border-[#1D1E15] mb-8"
+                variants={staggerContainer}
+              >
                 {[
                   { 
                     label: 'Models Processed', 
@@ -441,9 +548,10 @@ export default function Home() {
                     explanation: 'Average time reduction compared to traditional manual 3D processing pipelines. Measured by comparing render times across different mesh complexities using our optimized solutions.'
                   },
                 ].map((stat, idx) => (
-                  <div
+                  <motion.div
                     key={idx}
                     className={`p-6 border-r border-[#1D1E15] last:border-r-0 hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex flex-col`}
+                    variants={staggerItem}
                   >
                     <div className="text-[10px] uppercase opacity-50 mb-2">{stat.label}</div>
                     <div className="text-2xl font-bold mb-1">{stat.value}</div>
@@ -452,10 +560,10 @@ export default function Home() {
                       <div className="h-full bg-[#DF6C42]" style={{ width: `${stat.chart}%` }}></div>
                     </div>
                     <div className="text-[9px] opacity-60 leading-relaxed mt-auto">{stat.explanation}</div>
-                  </div>
+                  </motion.div>
                 ))}
-              </div>
-            </div>
+              </motion.div>
+            </motion.div>
           </div>
         </div>
       </section>
@@ -468,19 +576,37 @@ export default function Home() {
           
           {/* Main Content */}
           <div className="col-span-12 lg:col-span-11">
-            <div className="px-10 py-16 border-b border-[#1D1E15]">
-              <div className="inline-flex items-center gap-2 px-2 py-0.5 border border-[#1D1E15] text-[10px] uppercase tracking-wider w-fit mb-8">
+            <motion.div 
+              className="px-10 py-16 border-b border-[#1D1E15]"
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, amount: 0.2 }}
+              variants={staggerContainer}
+            >
+              <motion.div 
+                className="inline-flex items-center gap-2 px-2 py-0.5 border border-[#1D1E15] text-[10px] uppercase tracking-wider w-fit mb-8"
+                variants={fadeInDown}
+              >
                 <div className="w-1.5 h-1.5 bg-[#DF6C42]"></div>
                 INTEGRATIONS
-              </div>
+              </motion.div>
               
-              <h3 className="text-4xl font-sans font-medium leading-none tracking-tight text-[#1D1E15] mb-12">
+              <motion.h3 
+                className="text-4xl font-sans font-medium leading-none tracking-tight text-[#1D1E15] mb-12"
+                variants={fadeInUp}
+              >
                 AI Model Integration
-              </h3>
+              </motion.h3>
               
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 border border-[#1D1E15]">
+              <motion.div 
+                className="grid grid-cols-1 lg:grid-cols-2 gap-0 border border-[#1D1E15]"
+                variants={staggerContainer}
+              >
                 {/* Gemini Pro */}
-                <div className="p-8 border-r border-b border-[#1D1E15] lg:border-b-0 hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex flex-col h-full">
+                <motion.div 
+                  className="p-8 border-r border-b border-[#1D1E15] lg:border-b-0 hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex flex-col h-full"
+                  variants={staggerItem}
+                >
                   <div className="flex items-center gap-4 mb-6">
                     <img src="/gemini-pro.png" alt="Gemini Pro" className="h-8 w-auto object-contain filter brightness-0 opacity-60" />
                   </div>
@@ -501,10 +627,13 @@ export default function Home() {
                       <div className="text-sm font-medium">gemini-2.0-flash-exp</div>
                     </div>
                   </div>
-                </div>
+                </motion.div>
                 
                 {/* OpenAI */}
-                <div className="p-8 hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex flex-col h-full">
+                <motion.div 
+                  className="p-8 hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex flex-col h-full"
+                  variants={staggerItem}
+                >
                   <div className="flex items-center gap-4 mb-6">
                     <img src="/openai.png" alt="OpenAI" className="h-8 w-auto object-contain filter brightness-0 opacity-60" />
                   </div>
@@ -524,11 +653,14 @@ export default function Home() {
                       <div className="text-sm font-medium">GPT-4</div>
                     </div>
                   </div>
-                </div>
-              </div>
+                </motion.div>
+              </motion.div>
               
               {/* Mesh Extraction Explanation */}
-              <div className="mt-8 border border-[#1D1E15] p-8">
+              <motion.div 
+                className="mt-8 border border-[#1D1E15] p-8"
+                variants={fadeInUp}
+              >
                 <div className="text-[10px] uppercase opacity-50 mb-6">Mesh Extraction via Gemini</div>
                 <div className="flex flex-col gap-6">
                   {/* Large Image */}
@@ -583,10 +715,13 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
-              </div>
+              </motion.div>
               
               {/* Integration Flow */}
-              <div className="mt-8 border border-[#1D1E15] p-8">
+              <motion.div 
+                className="mt-8 border border-[#1D1E15] p-8"
+                variants={fadeInUp}
+              >
                 <div className="text-[10px] uppercase opacity-50 mb-4">Model Workflow</div>
                 <div className="flex flex-col lg:flex-wrap items-center gap-4 lg:justify-center">
                   {['Upload', 'AI Identification Trigger', 'GPT-4 Processing', 'Gemini Pro Annotation', 'Export'].map((step, idx) => (
@@ -605,8 +740,8 @@ export default function Home() {
                     </React.Fragment>
                   ))}
                 </div>
-              </div>
-            </div>
+              </motion.div>
+            </motion.div>
           </div>
         </div>
       </section>
@@ -619,19 +754,37 @@ export default function Home() {
           
           {/* Main Content */}
           <div className="col-span-12 lg:col-span-11">
-            <div className="px-10 py-16 border-b border-[#1D1E15]">
-              <div className="inline-flex items-center gap-2 px-2 py-0.5 border border-[#1D1E15] text-[10px] uppercase tracking-wider w-fit mb-8">
+            <motion.div 
+              className="px-10 py-16 border-b border-[#1D1E15]"
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, amount: 0.2 }}
+              variants={staggerContainer}
+            >
+              <motion.div 
+                className="inline-flex items-center gap-2 px-2 py-0.5 border border-[#1D1E15] text-[10px] uppercase tracking-wider w-fit mb-8"
+                variants={fadeInDown}
+              >
                 <div className="w-1.5 h-1.5 bg-[#DF6C42]"></div>
                 FILE MANAGEMENT
-              </div>
+              </motion.div>
               
-              <h3 className="text-4xl font-sans font-medium leading-none tracking-tight text-[#1D1E15] mb-12">
+              <motion.h3 
+                className="text-4xl font-sans font-medium leading-none tracking-tight text-[#1D1E15] mb-12"
+                variants={fadeInUp}
+              >
                 Upload & Export
-              </h3>
+              </motion.h3>
               
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 border border-[#1D1E15]">
+              <motion.div 
+                className="grid grid-cols-1 lg:grid-cols-2 gap-0 border border-[#1D1E15]"
+                variants={staggerContainer}
+              >
                 {/* Upload */}
-                <div className="p-8 border-r border-b border-[#1D1E15] lg:border-b-0 hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex flex-col h-full">
+                <motion.div 
+                  className="p-8 border-r border-b border-[#1D1E15] lg:border-b-0 hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex flex-col h-full"
+                  variants={staggerItem}
+                >
                   <div className="flex items-center gap-4 mb-6">
                     <div className="w-8 h-8 border-2 border-[#1D1E15] flex items-center justify-center">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -655,10 +808,13 @@ export default function Home() {
                       <div className="text-sm font-medium">100MB</div>
                     </div>
                   </div>
-                </div>
+                </motion.div>
                 
                 {/* Export */}
-                <div className="p-8 hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex flex-col h-full">
+                <motion.div 
+                  className="p-8 hover:bg-[#1D1E15] hover:text-[#E5E6DA] transition-colors flex flex-col h-full"
+                  variants={staggerItem}
+                >
                   <div className="flex items-center gap-4 mb-6">
                     <div className="w-8 h-8 border-2 border-[#1D1E15] flex items-center justify-center">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -682,9 +838,9 @@ export default function Home() {
                       <div className="text-sm font-medium">3D Printing, CAD and more!</div>
                     </div>
                   </div>
-                </div>
-              </div>
-            </div>
+                </motion.div>
+              </motion.div>
+            </motion.div>
           </div>
         </div>
       </section>
@@ -697,18 +853,33 @@ export default function Home() {
           
           {/* Main Content */}
           <div className="col-span-12 lg:col-span-11">
-            <div className="px-10 py-16 border-b border-[#1D1E15]">
-              <div className="inline-flex items-center gap-2 px-2 py-0.5 border border-[#1D1E15] text-[10px] uppercase tracking-wider w-fit mb-8">
+            <motion.div 
+              className="px-10 py-16 border-b border-[#1D1E15]"
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, amount: 0.2 }}
+              variants={staggerContainer}
+            >
+              <motion.div 
+                className="inline-flex items-center gap-2 px-2 py-0.5 border border-[#1D1E15] text-[10px] uppercase tracking-wider w-fit mb-8"
+                variants={fadeInDown}
+              >
                 <div className="w-1.5 h-1.5 bg-[#DF6C42]"></div>
                 MOTION CONTROL
-              </div>
+              </motion.div>
               
-              <h3 className="text-4xl font-sans font-medium leading-none tracking-tight text-[#1D1E15] mb-12">
+              <motion.h3 
+                className="text-4xl font-sans font-medium leading-none tracking-tight text-[#1D1E15] mb-12"
+                variants={fadeInUp}
+              >
                 Arduino M5StickCPlus2 Integration
-              </h3>
+              </motion.h3>
               
               {/* Demo Video */}
-              <div className="border border-[#1D1E15] mb-8 bg-[#E5E6DA] overflow-hidden">
+              <motion.div 
+                className="border border-[#1D1E15] mb-8 bg-[#E5E6DA] overflow-hidden"
+                variants={fadeInUp}
+              >
                 <video 
                   src="/movement.mp4" 
                   autoPlay
@@ -720,10 +891,13 @@ export default function Home() {
                 >
                   Your browser does not support the video tag.
                 </video>
-              </div>
+              </motion.div>
               
               {/* Camera Stick */}
-              <div className="border border-[#1D1E15] mb-8">
+              <motion.div 
+                className="border border-[#1D1E15] mb-8"
+                variants={fadeInUp}
+              >
                 <div className="p-8 border-b border-[#1D1E15]">
                   <div className="flex items-center gap-4 mb-4">
                     <img src="/arduino.png" alt="Arduino" className="h-8 w-auto object-contain filter brightness-0 opacity-60" />
@@ -777,10 +951,13 @@ export default function Home() {
                     <div>q_z = cos(r/2)cos(p/2)sin(y/2) - sin(r/2)sin(p/2)cos(y/2)</div>
                   </div>
                 </div>
-              </div>
+              </motion.div>
               
               {/* Object Stick */}
-              <div className="border border-[#1D1E15] mb-8">
+              <motion.div 
+                className="border border-[#1D1E15] mb-8"
+                variants={fadeInUp}
+              >
                 <div className="p-8 border-b border-[#1D1E15]">
                   <div className="flex items-center gap-4 mb-4">
                     <img src="/arduino.png" alt="Arduino" className="h-8 w-auto object-contain filter brightness-0 opacity-60" />
@@ -833,8 +1010,8 @@ export default function Home() {
                     <div>// Actions encoded as special quaternion patterns</div>
                   </div>
                 </div>
-              </div>
-            </div>
+              </motion.div>
+            </motion.div>
           </div>
         </div>
       </section>
@@ -847,7 +1024,13 @@ export default function Home() {
           
           {/* Main Content */}
           <div className="col-span-12 lg:col-span-11">
-            <div className="px-10 py-8">
+            <motion.div 
+              className="px-10 py-8"
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, amount: 0.2 }}
+              variants={fadeIn}
+            >
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8 border-b border-[#1D1E15] pb-8 mb-6">
                 <div>
                   <div className="flex items-center gap-2 mb-4">
@@ -910,7 +1093,7 @@ export default function Home() {
                   <span>System Status: Nominal</span>
                 </div>
               </div>
-            </div>
+            </motion.div>
           </div>
         </div>
       </footer>
