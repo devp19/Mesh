@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
@@ -13,6 +14,7 @@ import * as BufferGeometryUtils from "three/addons/utils/BufferGeometryUtils.js"
 import { AnimatePresence } from "framer-motion";
 import BlockyLoader from "./BlockyLoader";
 import AIInferenceLoader from "./AIInferenceLoader";
+import OnboardingOverlay from "./OnboardingOverlay";
 import { DEMO_MODELS, getDemoAnnotation, DemoModel } from "@/lib/demo-config";
 
 const IS_PRODUCTION_DEMO = process.env.NEXT_PUBLIC_PRODUCTION_DEMO === "true";
@@ -66,6 +68,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   useEffect(() => { showAnnotatedModalRef.current = showAnnotatedModal; }, [showAnnotatedModal]);
   const [annotatedImage, setAnnotatedImage] = useState<string | null>(null);
   const [showInferenceLoader, setShowInferenceLoader] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(true);
   const showInferenceLoaderRef = useRef(false);
   useEffect(() => { showInferenceLoaderRef.current = showInferenceLoader; }, [showInferenceLoader]);
   const aiIdentifyActiveRef = useRef(false);
@@ -1059,6 +1062,12 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
 
     const loader = new GLTFLoader();
 
+    // Setup DRACO loader
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+    dracoLoader.setDecoderConfig({ type: 'js' }); // Explicitly use JS decoder for broader compatibility
+    loader.setDRACOLoader(dracoLoader);
+
     // Clear existing models and their cached annotation data
     generatedObjectsRef.current.forEach((obj) => {
       // Clear annotation data from all meshes in the object before removing
@@ -1206,6 +1215,9 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   };
 
   const generateModel = async (prompt: string) => {
+    // Hide onboarding if active
+    if (showOnboarding) setShowOnboarding(false);
+
     if (!sceneRef.current || !prompt.trim()) return;
 
     setGenerateStarted(true);
@@ -1755,6 +1767,9 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !sceneRef.current) return;
+    
+    // Hide onboarding if active
+    if (showOnboarding) setShowOnboarding(false);
 
     const url = URL.createObjectURL(file);
     loadModelFromUrl(url, true);
@@ -2073,6 +2088,21 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
     const modelId = e.target.value;
     if (!modelId) return;
     
+    // Hide onboarding if active
+    if (showOnboarding) setShowOnboarding(false);
+    
+    const model = DEMO_MODELS.find(m => m.id === modelId);
+    if (model) {
+      console.log("Loading demo model:", model.name);
+      setCurrentDemoModelId(modelId);
+      loadModelFromUrl(model.path, false);
+    }
+  };
+  
+  // Helper for Onboarding overlay to trigger demo select
+  const handleOnboardingDemoSelect = (modelId: string) => {
+    if (!modelId) return;
+    setShowOnboarding(false);
     const model = DEMO_MODELS.find(m => m.id === modelId);
     if (model) {
       console.log("Loading demo model:", model.name);
@@ -2084,6 +2114,20 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
   return (
     <div className="absolute inset-0 bg-[#E5E6DA] z-0">
       <div className="w-full h-full relative">
+        {/* Onboarding Overlay */}
+        {showOnboarding && (
+          <OnboardingOverlay
+            isDemoMode={IS_PRODUCTION_DEMO}
+            onGenerate={generateModel}
+            onSelectDemo={handleOnboardingDemoSelect}
+            onImport={() => {
+              document.getElementById("file-input")?.click();
+              // Don't dismiss immediately, wait for file selection in handleFileUpload
+            }}
+            onDismiss={() => setShowOnboarding(false)}
+          />
+        )}
+        
         {/* Top Controls */}
         <div className="absolute top-0 left-0 w-full z-10 p-4 flex justify-between items-center pointer-events-none">
           {/* Top Left - BLE Stick Controls */}
@@ -2252,16 +2296,17 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
           </div>
         </div>
 
-        {/* Generate Prompt Bar */}
+        {/* Generate Prompt Bar - Hidden when onboarding is active to reduce clutter */}
+        {!showOnboarding && (
         <div className="absolute bottom-0 left-0 w-full z-10 p-4 pointer-events-none">
           <div className="max-w-2xl mx-auto pointer-events-auto">
             <div className="bg-[#E5E6DA]/80 border border-[#1D1E15] backdrop-blur-md p-1.5 flex gap-2 items-center shadow-lg">
               {IS_PRODUCTION_DEMO ? (
                 <select
                   onChange={handleDemoSelect}
-                  defaultValue=""
+                  value={currentDemoModelId || ""}
                   className="flex-1 bg-transparent border-none outline-none text-[#1D1E15] text-[10px] font-mono px-3 py-2 cursor-pointer appearance-none"
-                  style={{ backgroundImage: 'none' }} // Remove default arrow if desired, or keep it
+                  style={{ backgroundImage: 'none' }}
                 >
                   <option value="" disabled>Select a Demo Model</option>
                   {DEMO_MODELS.map((model) => (
@@ -2297,6 +2342,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
             </div>
           </div>
         </div>
+        )}
 
 
         {/* Inspector Panel */}
