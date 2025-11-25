@@ -2532,7 +2532,7 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
                           onChange={(e) =>
                             setExplosionDistance(parseFloat(e.target.value))
                           }
-                          className="w-full h-1 bg-[#1D1E15]/20 rounded-lg appearance-none cursor-pointer accent-[#DF6C42]"
+                          className="w-full h-1 bg-[#1D1E15]/20 rounded-lg appearance-none cursor-pointer"
                         />
                       </div>
                     </div>
