@@ -1,5 +1,7 @@
 # Mesh - The Coordination Layer for GeoSpatial Data
 
+<img width="2920" height="1548" alt="image" src="https://github.com/user-attachments/assets/397486b0-2fa0-4e24-83b1-4fdca3e0a1cb" />
+
 ## Inspiration
 
 3D model processing has always been a bottleneck in geospatial workflows. Traditional pipelines require complex software stacks, manual component extraction, and hours of processing time. Engineers, educators, and researchers spend countless hours breaking down 3D models, identifying components, and creating educational visualizations — all through tedious, error-prone manual processes.
