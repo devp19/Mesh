@@ -2234,6 +2234,14 @@ export default function ModelViewer({ onClose }: ModelViewerProps) {
                 </>
               )}
             </div>
+
+            {/* M5Stick Instruction */}
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] font-mono text-[#1D1E15]/40">←</span>
+              <span className="text-[9px] font-mono text-[#1D1E15]/40">
+                If provisioning your own m5Stick, use these to connect!
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 pointer-events-auto">
